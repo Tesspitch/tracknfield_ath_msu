@@ -143,24 +143,14 @@ const currentTab = ref<'import' | 'timing' | 'results' | 'events' | 'rounds' | '
     <main class="flex-1 p-4 md:p-8 min-w-0">
       <div class="max-w-6xl mx-auto">
         <div class="bg-white rounded-2xl shadow-sm border border-gray-200/60 p-6 md:p-8 min-h-[calc(100vh-4rem)]">
-          <div v-if="currentTab === 'events'">
-            <EventManager />
-          </div>
-          <div v-else-if="currentTab === 'rounds'">
-            <RoundManager />
-          </div>
-          <div v-else-if="currentTab === 'import'">
-            <ExcelUploader />
-          </div>
-          <div v-else-if="currentTab === 'timing'">
-            <TimingSheet />
-          </div>
-          <div v-else-if="currentTab === 'results'">
-            <ResultsViewer />
-          </div>
-          <div v-else-if="currentTab === 'athletes'">
-            <AthleteList />
-          </div>
+          <KeepAlive>
+            <EventManager v-if="currentTab === 'events'" />
+            <RoundManager v-else-if="currentTab === 'rounds'" />
+            <ExcelUploader v-else-if="currentTab === 'import'" />
+            <TimingSheet v-else-if="currentTab === 'timing'" />
+            <ResultsViewer v-else-if="currentTab === 'results'" />
+            <AthleteList v-else-if="currentTab === 'athletes'" />
+          </KeepAlive>
         </div>
       </div>
     </main>
