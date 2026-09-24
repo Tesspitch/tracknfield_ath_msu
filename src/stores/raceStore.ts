@@ -65,6 +65,7 @@ export const useRaceStore = defineStore('race', () => {
         )
       `)
       .eq('round_id', roundId)
+      .order('rank', { ascending: true, nullsFirst: false })
       .order('lane_number', { ascending: true })
 
     if (!error && data) {
