@@ -14,8 +14,8 @@ const editRoundName = ref('')
 
 const groupedRounds = computed(() => {
   const groups: { eventName: string, rounds: any[] }[] = []
-  let currentEventId = null
-  let currentGroup = null
+  let currentEventId: number | null = null
+  let currentGroup: { eventName: string, rounds: any[] } | null = null
   
   for (const r of rounds.value) {
     if (r.event_id !== currentEventId) {
