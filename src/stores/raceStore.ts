@@ -17,6 +17,7 @@ export interface EnhancedRaceResult extends RaceResult {
       athletes: { full_name: string, student_id: string | null } | null
     }[]
   } | null
+  event_rounds?: { round_name: string, events?: { event_name: string } } | null
   // UI Specific temporary state
   timeInput?: string
   time_unit?: string
@@ -29,7 +30,7 @@ export const useRaceStore = defineStore('race', () => {
   const activeResults = ref<EnhancedRaceResult[]>([])
 
   const selectedEventId = ref<number | 'ALL' | null>(null)
-  const selectedRoundId = ref<number | 'ALL' | null>(null)
+  const selectedRoundId = ref<number | 'ALL' | 'ALL_FINALS' | 'ALL_HEATS' | null>(null)
 
   const fetchEvents = async () => {
     const { data, error } = await supabase.from('events').select('*').order('event_id')
@@ -145,7 +146,7 @@ export const useRaceStore = defineStore('race', () => {
     }
   }
 
-  const fetchAllResultsGlobal = async () => {
+  const fetchAllResultsGlobal = async (roundFilter: 'ALL' | 'ALL_FINALS' | 'ALL_HEATS' = 'ALL') => {
     const { data, error } = await supabase
       .from('race_results')
       .select(`
@@ -163,8 +164,22 @@ export const useRaceStore = defineStore('race', () => {
       .order('rank', { ascending: true }) // You can sort by rank or record_time
 
     if (!error && data) {
+      let filteredData = data as any[]
+      
+      if (roundFilter === 'ALL_FINALS') {
+        filteredData = filteredData.filter(row => {
+          const rName = row.event_rounds?.round_name?.toLowerCase() || ''
+          return rName.includes('final') || rName.includes('ชิง')
+        })
+      } else if (roundFilter === 'ALL_HEATS') {
+        filteredData = filteredData.filter(row => {
+          const rName = row.event_rounds?.round_name?.toLowerCase() || ''
+          return !(rName.includes('final') || rName.includes('ชิง'))
+        })
+      }
+
       // Sort by event name, then by round, then by rank/time
-      const sorted = (data as any[]).sort((a, b) => {
+      const sorted = filteredData.sort((a, b) => {
         const eventA = a.event_rounds?.events?.event_name || ''
         const eventB = b.event_rounds?.events?.event_name || ''
         if (eventA !== eventB) return eventA.localeCompare(eventB)

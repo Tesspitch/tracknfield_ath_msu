@@ -21,17 +21,17 @@ onMounted(() => {
 })
 
 watch(() => raceStore.selectedEventId, (newId) => {
-  if (newId) {
-    raceStore.fetchRoundsForEvent(newId)
+  if (newId && newId !== 'ALL') {
+    raceStore.fetchRoundsForEvent(newId as number)
     raceStore.selectedRoundId = null
     raceStore.activeResults = []
   }
 })
 
 watch(() => raceStore.selectedRoundId, (newId) => {
-  if (newId === 'ALL') {
-    if (raceStore.selectedEventId) {
-      raceStore.fetchAllResultsForEvent(raceStore.selectedEventId)
+  if (newId === 'ALL' || newId === 'ALL_FINALS' || newId === 'ALL_HEATS') {
+    if (raceStore.selectedEventId && raceStore.selectedEventId !== 'ALL') {
+      raceStore.fetchAllResultsForEvent(raceStore.selectedEventId as number)
     }
   } else if (newId) {
     raceStore.fetchResultsForRound(newId as number)
@@ -143,14 +143,14 @@ const createNewRound = async () => {
   if (!roundName || roundName.trim() === '') return
   
   const { error } = await supabase.from('event_rounds').insert({
-    event_id: raceStore.selectedEventId,
+    event_id: raceStore.selectedEventId as number,
     round_name: roundName.trim()
   })
   
   if (error) {
     alert('สร้างรอบไม่สำเร็จ: ' + error.message)
   } else {
-    raceStore.fetchRoundsForEvent(raceStore.selectedEventId)
+    raceStore.fetchRoundsForEvent(raceStore.selectedEventId as number)
   }
 }
 
@@ -197,7 +197,7 @@ const deleteRound = async () => {
     if (error) throw error
 
     raceStore.selectedRoundId = null
-    raceStore.fetchRoundsForEvent(raceStore.selectedEventId!)
+    raceStore.fetchRoundsForEvent(raceStore.selectedEventId as number)
     alert('ลบรอบการแข่งขันและรายชื่อสำเร็จ')
   } catch (err: any) {
     alert('ลบไม่สำเร็จ: ' + err.message)
@@ -233,13 +233,13 @@ const handleAdvance = async (data: { roundName: string, athleteIds: number[] }) 
       targetRoundId = existingRound.round_id
     } else {
       const { data: newR, error: errR } = await supabase.from('event_rounds').insert({
-        event_id: raceStore.selectedEventId, 
+        event_id: raceStore.selectedEventId as number, 
         round_name: data.roundName
       }).select().single()
       
       if (errR) throw errR
       targetRoundId = newR.round_id
-      await raceStore.fetchRoundsForEvent(raceStore.selectedEventId!)
+      await raceStore.fetchRoundsForEvent(raceStore.selectedEventId as number)
     }
 
     const inserts = data.athleteIds.map(id => {
@@ -507,16 +507,16 @@ const removeResult = async (resultId: number) => {
     
     <AddParticipantModal
       :isOpen="isAddParticipantModalOpen"
-      :eventId="raceStore.selectedEventId"
-      :roundId="raceStore.selectedRoundId === 'ALL' ? null : raceStore.selectedRoundId"
+      :eventId="(raceStore.selectedEventId as number)"
+      :roundId="typeof raceStore.selectedRoundId === 'number' ? raceStore.selectedRoundId : null"
       @close="isAddParticipantModalOpen = false"
-      @added="raceStore.selectedRoundId !== 'ALL' && raceStore.fetchResultsForRound(raceStore.selectedRoundId as number)"
+      @added="typeof raceStore.selectedRoundId === 'number' && raceStore.fetchResultsForRound(raceStore.selectedRoundId)"
     />
     
     <EditParticipantModal
       :isOpen="isEditModalOpen"
-      :eventId="raceStore.selectedEventId"
-      :roundId="raceStore.selectedRoundId === 'ALL' ? null : raceStore.selectedRoundId"
+      :eventId="(raceStore.selectedEventId as number)"
+      :roundId="typeof raceStore.selectedRoundId === 'number' ? raceStore.selectedRoundId : null"
       :existingData="editingResultData"
       @close="isEditModalOpen = false"
       @edited="raceStore.selectedRoundId !== 'ALL' && raceStore.fetchResultsForRound(raceStore.selectedRoundId as number)"

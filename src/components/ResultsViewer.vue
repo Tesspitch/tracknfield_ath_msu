@@ -41,8 +41,10 @@ watch(() => raceStore.selectedEventId, (newId) => {
 
 watch(() => raceStore.selectedRoundId, (newId) => {
   if (newId) {
-    if (newId === 'ALL') {
-      if (raceStore.selectedEventId && raceStore.selectedEventId !== 'ALL') {
+    if (newId === 'ALL' || newId === 'ALL_FINALS' || newId === 'ALL_HEATS') {
+      if (raceStore.selectedEventId === 'ALL') {
+        raceStore.fetchAllResultsGlobal(newId as 'ALL' | 'ALL_FINALS' | 'ALL_HEATS')
+      } else if (raceStore.selectedEventId) {
         raceStore.fetchAllResultsForEvent(raceStore.selectedEventId as number)
       }
     } else {
@@ -206,7 +208,9 @@ const prepareBulkExport = async () => {
         <label class="block text-sm font-medium text-gray-700 mb-2">รอบการแข่งขัน (เลือกรอบชิงเพื่อออกเกียรติบัตร)</label>
         <select v-model="raceStore.selectedRoundId" class="w-full border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-blue-500 py-2.5 px-3" :disabled="!raceStore.selectedEventId">
           <option :value="null">-- เลือกรอบ --</option>
-          <option v-if="raceStore.selectedEventId === 'ALL'" value="ALL">รวมผลทุกรอบ</option>
+          <option v-if="raceStore.selectedEventId === 'ALL'" value="ALL">รวมผลทุกรอบ (ทั้งหมด)</option>
+          <option v-if="raceStore.selectedEventId === 'ALL'" value="ALL_FINALS">เฉพาะรอบชิงชนะเลิศทั้งหมด</option>
+          <option v-if="raceStore.selectedEventId === 'ALL'" value="ALL_HEATS">เฉพาะรอบคัดเลือกทั้งหมด</option>
           <option v-if="raceStore.selectedEventId && raceStore.selectedEventId !== 'ALL'" value="ALL">ดูผลรวมรอบคัดเลือก</option>
           <option v-for="r in raceStore.rounds" :key="r.round_id" :value="r.round_id">
             {{ r.round_name }}
