@@ -26,17 +26,25 @@ onMounted(() => {
 })
 
 watch(() => raceStore.selectedEventId, (newId) => {
-  if (newId) {
-    raceStore.fetchRoundsForEvent(newId)
+  if (newId === 'ALL') {
+    raceStore.fetchAllResultsGlobal()
+    raceStore.selectedRoundId = 'ALL'
+  } else if (newId) {
+    raceStore.fetchRoundsForEvent(newId as number)
     raceStore.selectedRoundId = null
     raceStore.activeResults = []
+  } else {
+    raceStore.activeResults = []
+    raceStore.selectedRoundId = null
   }
 })
 
 watch(() => raceStore.selectedRoundId, (newId) => {
   if (newId) {
     if (newId === 'ALL') {
-      if (raceStore.selectedEventId) raceStore.fetchAllResultsForEvent(raceStore.selectedEventId)
+      if (raceStore.selectedEventId && raceStore.selectedEventId !== 'ALL') {
+        raceStore.fetchAllResultsForEvent(raceStore.selectedEventId as number)
+      }
     } else {
       raceStore.fetchResultsForRound(newId as number)
     }
@@ -187,6 +195,7 @@ const prepareBulkExport = async () => {
         <label class="block text-sm font-medium text-gray-700 mb-2">รายการแข่งขัน</label>
         <select v-model="raceStore.selectedEventId" class="w-full border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-blue-500 py-2.5 px-3">
           <option :value="null">-- เลือกรายการ --</option>
+          <option value="ALL">ดูผลการแข่งขันทั้งหมดทุกรายการ</option>
           <option v-for="e in raceStore.events" :key="e.event_id" :value="e.event_id">
             {{ e.event_name }}
           </option>
@@ -197,6 +206,8 @@ const prepareBulkExport = async () => {
         <label class="block text-sm font-medium text-gray-700 mb-2">รอบการแข่งขัน (เลือกรอบชิงเพื่อออกเกียรติบัตร)</label>
         <select v-model="raceStore.selectedRoundId" class="w-full border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-blue-500 py-2.5 px-3" :disabled="!raceStore.selectedEventId">
           <option :value="null">-- เลือกรอบ --</option>
+          <option v-if="raceStore.selectedEventId === 'ALL'" value="ALL">รวมผลทุกรอบ</option>
+          <option v-if="raceStore.selectedEventId && raceStore.selectedEventId !== 'ALL'" value="ALL">ดูผลรวมรอบคัดเลือก</option>
           <option v-for="r in raceStore.rounds" :key="r.round_id" :value="r.round_id">
             {{ r.round_name }}
           </option>
@@ -231,8 +242,16 @@ const prepareBulkExport = async () => {
                 <span v-else-if="row.rank === 3" class="text-amber-700">🥉 3</span>
                 <span v-else>{{ row.rank || '-' }}</span>
               </td>
-              <td class="px-4 py-3 font-medium text-gray-900">
-                {{ row.athletes?.full_name || row.relay_teams?.team_name || 'ไม่ระบุ' }}
+              <td class="px-4 py-3">
+                <div class="font-medium text-gray-900">
+                  {{ row.athletes?.full_name || row.relay_teams?.team_name || 'ไม่ระบุ' }}
+                </div>
+                <div class="text-xs text-gray-500 mt-0.5">
+                  {{ (row.athletes?.student_id) || 'ไม่ระบุรหัสนักศึกษา' }}
+                </div>
+                <div v-if="raceStore.selectedEventId === 'ALL'" class="text-xs text-blue-600 mt-1 font-semibold bg-blue-50 px-2 py-1 rounded inline-block">
+                  {{ row.event_rounds?.events?.event_name }} ({{ row.event_rounds?.round_name }})
+                </div>
               </td>
               <td class="px-4 py-3 font-mono">{{ formatTime(row.record_time) || '-' }}</td>
               <td class="px-4 py-3">

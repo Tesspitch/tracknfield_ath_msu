@@ -28,7 +28,7 @@ export const useRaceStore = defineStore('race', () => {
   const rounds = ref<EventRound[]>([])
   const activeResults = ref<EnhancedRaceResult[]>([])
 
-  const selectedEventId = ref<number | null>(null)
+  const selectedEventId = ref<number | 'ALL' | null>(null)
   const selectedRoundId = ref<number | 'ALL' | null>(null)
 
   const fetchEvents = async () => {
@@ -145,6 +145,38 @@ export const useRaceStore = defineStore('race', () => {
     }
   }
 
+  const fetchAllResultsGlobal = async () => {
+    const { data, error } = await supabase
+      .from('race_results')
+      .select(`
+        *,
+        athletes(full_name, student_id),
+        relay_teams(
+          team_name,
+          relay_members(
+            leg_order,
+            athletes(full_name, student_id)
+          )
+        ),
+        event_rounds(round_name, events(event_name))
+      `)
+      .order('rank', { ascending: true }) // You can sort by rank or record_time
+
+    if (!error && data) {
+      // Sort by event name, then by round, then by rank/time
+      const sorted = (data as any[]).sort((a, b) => {
+        const eventA = a.event_rounds?.events?.event_name || ''
+        const eventB = b.event_rounds?.events?.event_name || ''
+        if (eventA !== eventB) return eventA.localeCompare(eventB)
+        
+        const rankA = a.rank || 999
+        const rankB = b.rank || 999
+        return rankA - rankB
+      })
+      activeResults.value = sorted
+    }
+  }
+
   // Subscribe to real-time updates for the current round
   let realtimeChannel: any = null
   const subscribeToRound = (roundId: number) => {
@@ -196,6 +228,7 @@ export const useRaceStore = defineStore('race', () => {
     fetchRoundsForEvent,
     fetchResultsForRound,
     fetchAllResultsForEvent,
+    fetchAllResultsGlobal,
     subscribeToRound,
     saveResults
   }
