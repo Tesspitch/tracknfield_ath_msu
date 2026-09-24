@@ -75,13 +75,7 @@ export const useRaceStore = defineStore('race', () => {
   const fetchAllResultsForEvent = async (_eventId: number) => {
     if (rounds.value.length === 0) return
     
-    // แยกแยะรอบชิง กับ รอบคัดเลือก
-    const finalRounds = rounds.value.filter(r => 
-      r.round_name.toLowerCase().includes('final') || 
-      r.round_name.includes('ชิง')
-    )
-    const finalRoundIds = finalRounds.map(r => r.round_id)
-    
+    // แยกแยะรอบคัดเลือก
     const heatRounds = rounds.value.filter(r => 
       !r.round_name.toLowerCase().includes('final') && 
       !r.round_name.includes('ชิง')
@@ -111,31 +105,8 @@ export const useRaceStore = defineStore('race', () => {
       .in('round_id', heatRoundIds)
 
     if (!error && heatData) {
-      // ตรวจสอบว่ามีใครเข้ารอบชิงไปแล้วบ้าง เพื่อกรองออก
-      const advancedIds = new Set<string>()
-      if (finalRoundIds.length > 0) {
-        const { data: finalData } = await supabase
-          .from('race_results')
-          .select('athlete_id, relay_team_id')
-          .in('round_id', finalRoundIds)
-          
-        if (finalData) {
-          finalData.forEach(row => {
-            if (row.athlete_id) advancedIds.add(`a_${row.athlete_id}`)
-            if (row.relay_team_id) advancedIds.add(`r_${row.relay_team_id}`)
-          })
-        }
-      }
-
-      // กรองคนที่เข้ารอบไปแล้วออก
-      const filteredData = heatData.filter(row => {
-        if (row.athlete_id && advancedIds.has(`a_${row.athlete_id}`)) return false
-        if (row.relay_team_id && advancedIds.has(`r_${row.relay_team_id}`)) return false
-        return true
-      })
-
       // Sort by best time (ascending), put non-OK and nulls at the bottom
-      const sorted = (filteredData as any[]).sort((a, b) => {
+      const sorted = (heatData as any[]).sort((a, b) => {
         if (a.status !== 'OK' && b.status === 'OK') return 1
         if (a.status === 'OK' && b.status !== 'OK') return -1
         if (a.record_time === null) return 1

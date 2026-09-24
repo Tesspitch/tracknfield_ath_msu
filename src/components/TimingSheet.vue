@@ -116,6 +116,8 @@ const autoRank = () => {
   otherResults.forEach(r => {
     r.rank = null
   })
+
+  raceStore.activeResults = [...okResults, ...otherResults]
 }
 
 const saveResults = async () => {
