@@ -2,6 +2,7 @@
 import { ref, watch, nextTick } from 'vue'
 import html2canvas from 'html2canvas'
 import { jsPDF } from 'jspdf'
+import { Trash2 } from 'lucide-vue-next'
 
 const props = defineProps<{
   isOpen: boolean
@@ -20,6 +21,7 @@ const certRef = ref<HTMLElement | null>(null)
 const isGenerating = ref(false)
 const currentIndex = ref(0)
 const total = ref(0)
+const localWinners = ref<Array<any>>([])
 
 const currentWinner = ref({
   name: '',
@@ -29,11 +31,16 @@ const currentWinner = ref({
   timeUnit: 'วินาที'
 })
 
+const removeWinner = (index: number) => {
+  localWinners.value.splice(index, 1)
+  total.value = localWinners.value.length
+}
+
 const startBulkExport = async () => {
-  if (!certRef.value || props.winners.length === 0) return
+  if (!certRef.value || localWinners.value.length === 0) return
   
   isGenerating.value = true
-  total.value = props.winners.length
+  total.value = localWinners.value.length
   
   try {
     const pdf = new jsPDF({
@@ -42,9 +49,9 @@ const startBulkExport = async () => {
       format: 'a4'
     })
 
-    for (let i = 0; i < props.winners.length; i++) {
+    for (let i = 0; i < localWinners.value.length; i++) {
       currentIndex.value = i + 1
-      currentWinner.value = props.winners[i]
+      currentWinner.value = localWinners.value[i]
       
       // Wait for Vue to update the DOM
       await nextTick()
@@ -79,8 +86,9 @@ const startBulkExport = async () => {
 
 watch(() => props.isOpen, (newVal) => {
   if (newVal) {
+    localWinners.value = JSON.parse(JSON.stringify(props.winners))
     currentIndex.value = 0
-    total.value = props.winners.length
+    total.value = localWinners.value.length
   }
 })
 </script>
@@ -92,10 +100,27 @@ watch(() => props.isOpen, (newVal) => {
         <h3 class="text-lg font-semibold text-gray-900">สร้างเกียรติบัตรทั้งหมด (Bulk Export)</h3>
       </div>
       
-      <div class="p-6 text-center space-y-4">
-        <p class="text-gray-700">
+      <div class="p-6 space-y-4">
+        <p class="text-gray-700 text-center">
           พบข้อมูลผู้ชนะทั้งหมด <strong>{{ total }}</strong> รายการ
         </p>
+        
+        <div v-if="!isGenerating" class="max-h-60 overflow-y-auto border border-gray-200 rounded-md">
+          <ul class="divide-y divide-gray-100">
+            <li v-for="(winner, index) in localWinners" :key="index" class="flex justify-between items-center p-3 text-sm hover:bg-gray-50">
+              <div class="flex flex-col">
+                <span class="font-medium text-gray-800">{{ winner.name }}</span>
+                <span class="text-gray-500 text-xs mt-0.5">อันดับ {{ winner.rank }} - {{ winner.eventName }} ({{ winner.timeText }} {{ winner.timeUnit }})</span>
+              </div>
+              <button @click="removeWinner(index)" class="text-red-500 hover:text-red-700 hover:bg-red-50 p-1.5 rounded transition" title="ลบออกจากรายการพิมพ์">
+                <Trash2 class="w-4 h-4" />
+              </button>
+            </li>
+          </ul>
+          <div v-if="localWinners.length === 0" class="p-4 text-center text-gray-500 text-sm">
+            ไม่มีรายชื่อสำหรับออกเกียรติบัตร
+          </div>
+        </div>
         
         <div v-if="isGenerating" class="space-y-2">
           <p class="text-sm font-medium text-blue-600">
@@ -118,7 +143,7 @@ watch(() => props.isOpen, (newVal) => {
         </button>
         <button 
           @click="startBulkExport"
-          :disabled="isGenerating"
+          :disabled="isGenerating || localWinners.value?.length === 0"
           class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 font-medium"
         >
           เริ่มดาวน์โหลด PDF

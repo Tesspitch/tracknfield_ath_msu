@@ -171,21 +171,21 @@ const prepareBulkExport = async () => {
 
 <template>
   <div class="space-y-6">
-    <div class="flex justify-between items-center bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+    <div class="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
       <h2 class="text-xl font-bold text-gray-800">ผลการแข่งขัน</h2>
       <button 
         @click="prepareBulkExport"
-        class="flex items-center px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 font-medium transition"
+        class="flex items-center px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 font-medium transition"
       >
         <Download class="w-4 h-4 mr-2" />
         ดาวน์โหลดเกียรติบัตรทั้งหมด (PDF เดียว)
       </button>
     </div>
 
-    <div class="flex flex-col md:flex-row md:items-center space-y-4 md:space-y-0 md:space-x-4 bg-gray-50 p-4 rounded-lg border border-gray-200">
+    <div class="flex flex-col md:flex-row md:items-center space-y-4 md:space-y-0 md:space-x-4 bg-gray-50 p-4 rounded-xl border border-gray-200">
       <div class="flex-1">
-        <label class="block text-sm font-medium text-gray-700 mb-1">รายการแข่งขัน</label>
-        <select v-model="raceStore.selectedEventId" class="w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500">
+        <label class="block text-sm font-medium text-gray-700 mb-2">รายการแข่งขัน</label>
+        <select v-model="raceStore.selectedEventId" class="w-full border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-blue-500 py-2.5 px-3">
           <option :value="null">-- เลือกรายการ --</option>
           <option v-for="e in raceStore.events" :key="e.event_id" :value="e.event_id">
             {{ e.event_name }}
@@ -194,8 +194,8 @@ const prepareBulkExport = async () => {
       </div>
       
       <div class="flex-1">
-        <label class="block text-sm font-medium text-gray-700 mb-1">รอบการแข่งขัน (เลือกรอบชิงเพื่อออกเกียรติบัตร)</label>
-        <select v-model="raceStore.selectedRoundId" class="w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500" :disabled="!raceStore.selectedEventId">
+        <label class="block text-sm font-medium text-gray-700 mb-2">รอบการแข่งขัน (เลือกรอบชิงเพื่อออกเกียรติบัตร)</label>
+        <select v-model="raceStore.selectedRoundId" class="w-full border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-blue-500 py-2.5 px-3" :disabled="!raceStore.selectedEventId">
           <option :value="null">-- เลือกรอบ --</option>
           <option v-for="r in raceStore.rounds" :key="r.round_id" :value="r.round_id">
             {{ r.round_name }}
