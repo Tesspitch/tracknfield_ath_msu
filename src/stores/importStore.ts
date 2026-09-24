@@ -7,6 +7,8 @@ export const useImportStore = defineStore('import', () => {
   const isImporting = ref(false)
   const importError = ref<string | null>(null)
   const importSuccessMsg = ref<string | null>(null)
+  const importProgress = ref(0)
+  const importTotal = ref(0)
 
   const processExcel = async (file: File) => {
     isImporting.value = true
@@ -27,14 +29,25 @@ export const useImportStore = defineStore('import', () => {
       let count = 0;
       const importedEventNames = new Set<string>();
 
-      if (sheetIndividual) {
-        const jsonIndiv = XLSX.utils.sheet_to_json(sheetIndividual)
-        count += await processIndividuals(jsonIndiv, allEvents, importedEventNames)
+      const jsonIndiv = sheetIndividual ? XLSX.utils.sheet_to_json(sheetIndividual) : []
+      const jsonRelay = sheetRelay ? XLSX.utils.sheet_to_json(sheetRelay) : []
+      
+      importTotal.value = jsonIndiv.length + jsonRelay.length
+      importProgress.value = 0
+
+      // In-memory cache to speed up lookups during this import session
+      const cache = {
+        faculties: new Map<string, number>(),
+        athletes: new Map<string, number>(),
+        rounds: new Map<string, number>()
       }
 
-      if (sheetRelay) {
-        const jsonRelay = XLSX.utils.sheet_to_json(sheetRelay)
-        count += await processRelays(jsonRelay, allEvents, importedEventNames)
+      if (jsonIndiv.length > 0) {
+        count += await processIndividuals(jsonIndiv, allEvents, importedEventNames, cache)
+      }
+
+      if (jsonRelay.length > 0) {
+        count += await processRelays(jsonRelay, allEvents, importedEventNames, cache)
       }
 
       const eventNamesStr = Array.from(importedEventNames).join(', ')
@@ -44,10 +57,12 @@ export const useImportStore = defineStore('import', () => {
       importError.value = err.message || 'Error processing Excel file'
     } finally {
       isImporting.value = false
+      importProgress.value = 0
+      importTotal.value = 0
     }
   }
 
-  const processIndividuals = async (rows: any[], allEvents: any[], importedEventNames: Set<string>) => {
+  const processIndividuals = async (rows: any[], allEvents: any[], importedEventNames: Set<string>, cache: any) => {
     let importedCount = 0
     for (const row of rows) {
       const studentId = String(row.student_id || '').trim()
@@ -59,7 +74,10 @@ export const useImportStore = defineStore('import', () => {
       const roundName = String(row.round_name || '').trim()
       const laneNum = parseInt(row.lane_number) || null
 
-      if (!fullName || !eventName) continue
+      if (!fullName || !eventName) {
+        importProgress.value++
+        continue
+      }
 
       // 1. Find Event
       const normalizeName = (name: string) => String(name).replace(/\s+/g, '').replace(/^วิ่ง/, '').replace(/^ผลัด/, '').replace(/\*/g, 'x').replace(/ชาย$/, '').replace(/หญิง$/, '').replace(/ผสม$/, '').replace(/เมตร/g, '').toLowerCase()
@@ -83,39 +101,59 @@ export const useImportStore = defineStore('import', () => {
       
       const { data: existing } = await query.limit(1)
       if (existing && existing.length > 0) {
+        importProgress.value++
         continue; // Skip duplicate
       }
 
       // 3. Upsert Faculty
       let facId = null
       if (facName) {
-        const { data: fData } = await supabase.from('faculties').select('fac_id').eq('fac_name', facName).maybeSingle()
-        if (fData) { facId = fData.fac_id }
-        else {
-          const { data: newF } = await supabase.from('faculties').insert({ fac_name: facName }).select('fac_id').single()
-          if (newF) facId = newF.fac_id
+        if (cache.faculties.has(facName)) {
+          facId = cache.faculties.get(facName)
+        } else {
+          const { data: fData } = await supabase.from('faculties').select('fac_id').eq('fac_name', facName).maybeSingle()
+          if (fData) { 
+            facId = fData.fac_id 
+            cache.faculties.set(facName, facId)
+          } else {
+            const { data: newF } = await supabase.from('faculties').insert({ fac_name: facName }).select('fac_id').single()
+            if (newF) {
+              facId = newF.fac_id
+              cache.faculties.set(facName, facId)
+            }
+          }
         }
       }
 
       // 4. Upsert Athlete
       let athleteId = null
       
-      const { data: nameData } = await supabase.from('athletes').select('athlete_id').eq('full_name', fullName).maybeSingle()
-      if (nameData) {
-        athleteId = nameData.athlete_id
+      if (cache.athletes.has(fullName)) {
+        athleteId = cache.athletes.get(fullName)
         await supabase.from('athletes').update({ gender, faculty_id: facId, study_year: studyYear }).eq('athlete_id', athleteId)
       } else {
-        const { data: newA, error: insErr } = await supabase.from('athletes').insert({
-          student_id: studentId || null, full_name: fullName, gender, faculty_id: facId, study_year: studyYear
-        }).select('athlete_id').single()
-        
-        if (insErr && insErr.code === '23505') { // Unique constraint violation (likely student_id)
-          const { data: retryA } = await supabase.from('athletes').insert({
-            student_id: null, full_name: fullName, gender, faculty_id: facId, study_year: studyYear
+        const { data: nameData } = await supabase.from('athletes').select('athlete_id').eq('full_name', fullName).maybeSingle()
+        if (nameData) {
+          athleteId = nameData.athlete_id
+          cache.athletes.set(fullName, athleteId)
+          await supabase.from('athletes').update({ gender, faculty_id: facId, study_year: studyYear }).eq('athlete_id', athleteId)
+        } else {
+          const { data: newA, error: insErr } = await supabase.from('athletes').insert({
+            student_id: studentId || null, full_name: fullName, gender, faculty_id: facId, study_year: studyYear
           }).select('athlete_id').single()
-          if (retryA) athleteId = retryA.athlete_id
-        } else if (newA) {
-          athleteId = newA.athlete_id
+          
+          if (insErr && insErr.code === '23505') { // Unique constraint violation (likely student_id)
+            const { data: retryA } = await supabase.from('athletes').insert({
+              student_id: null, full_name: fullName, gender, faculty_id: facId, study_year: studyYear
+            }).select('athlete_id').single()
+            if (retryA) {
+              athleteId = retryA.athlete_id
+              cache.athletes.set(fullName, athleteId)
+            }
+          } else if (newA) {
+            athleteId = newA.athlete_id
+            cache.athletes.set(fullName, athleteId)
+          }
         }
       }
 
@@ -145,11 +183,12 @@ export const useImportStore = defineStore('import', () => {
         importedCount++
         importedEventNames.add(eventData.event_name)
       }
+      importProgress.value++
     }
     return importedCount
   }
 
-  const processRelays = async (rows: any[], allEvents: any[], importedEventNames: Set<string>) => {
+  const processRelays = async (rows: any[], allEvents: any[], importedEventNames: Set<string>, cache: any) => {
     let importedCount = 0
     const teamGroups = {} as Record<string, any[]>
     for (const r of rows) {
@@ -200,17 +239,27 @@ export const useImportStore = defineStore('import', () => {
         .limit(1)
 
       if (existingTeam && existingTeam.length > 0) {
+        importProgress.value += members.length
         continue; // Skip duplicate team
       }
 
       // 3. Upsert Faculty
       let facId = null
       if (facName) {
-        const { data: fData } = await supabase.from('faculties').select('fac_id').eq('fac_name', facName).maybeSingle()
-        if (fData) facId = fData.fac_id
-        else {
-          const { data: newF } = await supabase.from('faculties').insert({ fac_name: facName }).select('fac_id').single()
-          if (newF) facId = newF.fac_id
+        if (cache.faculties.has(facName)) {
+          facId = cache.faculties.get(facName)
+        } else {
+          const { data: fData } = await supabase.from('faculties').select('fac_id').eq('fac_name', facName).maybeSingle()
+          if (fData) {
+            facId = fData.fac_id
+            cache.faculties.set(facName, facId)
+          } else {
+            const { data: newF } = await supabase.from('faculties').insert({ fac_name: facName }).select('fac_id').single()
+            if (newF) {
+              facId = newF.fac_id
+              cache.faculties.set(facName, facId)
+            }
+          }
         }
       }
 
@@ -234,32 +283,52 @@ export const useImportStore = defineStore('import', () => {
 
         let memberFacId = null
         if (memberFacName) {
-          const { data: mfData } = await supabase.from('faculties').select('fac_id').eq('fac_name', memberFacName).maybeSingle()
-          if (mfData) memberFacId = mfData.fac_id
-          else {
-            const { data: newMF } = await supabase.from('faculties').insert({ fac_name: memberFacName }).select('fac_id').single()
-            if (newMF) memberFacId = newMF.fac_id
+          if (cache.faculties.has(memberFacName)) {
+            memberFacId = cache.faculties.get(memberFacName)
+          } else {
+            const { data: mfData } = await supabase.from('faculties').select('fac_id').eq('fac_name', memberFacName).maybeSingle()
+            if (mfData) {
+              memberFacId = mfData.fac_id
+              cache.faculties.set(memberFacName, memberFacId)
+            } else {
+              const { data: newMF } = await supabase.from('faculties').insert({ fac_name: memberFacName }).select('fac_id').single()
+              if (newMF) {
+                memberFacId = newMF.fac_id
+                cache.faculties.set(memberFacName, memberFacId)
+              }
+            }
           }
         }
 
         // Upsert Athlete
         let athleteId = null
-        const { data: nameData } = await supabase.from('athletes').select('athlete_id').eq('full_name', fullName).maybeSingle()
-        if (nameData) {
-          athleteId = nameData.athlete_id
+        
+        if (cache.athletes.has(fullName)) {
+          athleteId = cache.athletes.get(fullName)
           await supabase.from('athletes').update({ gender, faculty_id: memberFacId }).eq('athlete_id', athleteId)
         } else {
-          const { data: newA, error: insErr } = await supabase.from('athletes').insert({
-            student_id: studentId || null, full_name: fullName, gender, faculty_id: memberFacId
-          }).select('athlete_id').single()
-          
-          if (insErr && insErr.code === '23505') { // Unique constraint violation (likely student_id)
-            const { data: retryA } = await supabase.from('athletes').insert({
-              student_id: null, full_name: fullName, gender, faculty_id: memberFacId
+          const { data: nameData } = await supabase.from('athletes').select('athlete_id').eq('full_name', fullName).maybeSingle()
+          if (nameData) {
+            athleteId = nameData.athlete_id
+            cache.athletes.set(fullName, athleteId)
+            await supabase.from('athletes').update({ gender, faculty_id: memberFacId }).eq('athlete_id', athleteId)
+          } else {
+            const { data: newA, error: insErr } = await supabase.from('athletes').insert({
+              student_id: studentId || null, full_name: fullName, gender, faculty_id: memberFacId
             }).select('athlete_id').single()
-            if (retryA) athleteId = retryA.athlete_id
-          } else if (newA) {
-            athleteId = newA.athlete_id
+            
+            if (insErr && insErr.code === '23505') { // Unique constraint violation (likely student_id)
+              const { data: retryA } = await supabase.from('athletes').insert({
+                student_id: null, full_name: fullName, gender, faculty_id: memberFacId
+              }).select('athlete_id').single()
+              if (retryA) {
+                athleteId = retryA.athlete_id
+                cache.athletes.set(fullName, athleteId)
+              }
+            } else if (newA) {
+              athleteId = newA.athlete_id
+              cache.athletes.set(fullName, athleteId)
+            }
           }
         }
 
@@ -295,6 +364,7 @@ export const useImportStore = defineStore('import', () => {
       })
       importedCount++
       importedEventNames.add(eventData.event_name)
+      importProgress.value += members.length
     }
     return importedCount
   }
@@ -303,6 +373,8 @@ export const useImportStore = defineStore('import', () => {
     isImporting,
     importError,
     importSuccessMsg,
+    importProgress,
+    importTotal,
     processExcel
   }
 })

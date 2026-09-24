@@ -95,6 +95,15 @@ const downloadTemplate = () => {
         accept=".xlsx, .xls"
         @change="handleFileSelect"
       />
+      <div v-if="importStore.isImporting" class="w-full max-w-md mt-6">
+        <div class="flex justify-between text-sm text-gray-600 mb-1">
+          <span>กำลังนำเข้าข้อมูล...</span>
+          <span>{{ Math.min(100, Math.floor((importStore.importProgress / (importStore.importTotal || 1)) * 100)) }}% ({{ importStore.importProgress }}/{{ importStore.importTotal }})</span>
+        </div>
+        <div class="w-full bg-gray-200 rounded-full h-2.5">
+          <div class="bg-blue-600 h-2.5 rounded-full transition-all duration-300" :style="`width: ${Math.min(100, Math.floor((importStore.importProgress / (importStore.importTotal || 1)) * 100))}%`"></div>
+        </div>
+      </div>
     </div>
 
     <div v-if="importStore.importError" class="bg-red-50 text-red-600 p-4 rounded border border-red-200">
