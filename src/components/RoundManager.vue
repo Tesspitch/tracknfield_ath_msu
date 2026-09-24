@@ -26,7 +26,9 @@ const groupedRounds = computed(() => {
       }
       groups.push(currentGroup)
     }
-    currentGroup.rounds.push(r)
+    if (currentGroup) {
+      currentGroup.rounds.push(r)
+    }
   }
   
   return groups

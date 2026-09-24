@@ -143,7 +143,7 @@ watch(() => props.isOpen, (newVal) => {
         </button>
         <button 
           @click="startBulkExport"
-          :disabled="isGenerating || localWinners.value?.length === 0"
+          :disabled="isGenerating || localWinners.length === 0"
           class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 font-medium"
         >
           เริ่มดาวน์โหลด PDF
