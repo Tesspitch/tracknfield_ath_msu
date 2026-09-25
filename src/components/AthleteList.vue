@@ -1,13 +1,16 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { supabase } from '../lib/supabaseClient'
-import { Search, Trash2 } from 'lucide-vue-next'
+import { Search, Trash2, Download } from 'lucide-vue-next'
+import * as XLSX from 'xlsx'
 
 const athletes = ref<any[]>([])
 const loading = ref(true)
 const searchQuery = ref('')
 const facultyFilter = ref('ALL')
+const eventFilter = ref('ALL')
 const faculties = ref<any[]>([])
+const events = ref<string[]>([])
 
 const fetchAthletes = async () => {
   loading.value = true
@@ -43,6 +46,7 @@ const fetchAthletes = async () => {
     if (error) throw error
 
     // ประมวลผลรายการแข่งให้แสดงง่ายๆ
+    const allEvents = new Set<string>()
     const processed = (data || []).map(a => {
       const indivEvents = (a.race_results || [])
         .map((r: any) => r.event_rounds?.events?.event_name)
@@ -54,6 +58,7 @@ const fetchAthletes = async () => {
 
       // กรองซ้ำ
       const allUniqueEvents = [...new Set([...indivEvents, ...relayEvents])]
+      allUniqueEvents.forEach((e: string) => allEvents.add(e))
 
       return {
         ...a,
@@ -61,6 +66,7 @@ const fetchAthletes = async () => {
       }
     })
 
+    events.value = Array.from(allEvents).sort()
     athletes.value = processed
   } catch (e: any) {
     console.error(e)
@@ -120,6 +126,10 @@ const filteredAthletes = computed(() => {
     result = result.filter(a => a.faculty_id === parseInt(facultyFilter.value))
   }
 
+  if (eventFilter.value !== 'ALL') {
+    result = result.filter(a => a.eventList.includes(eventFilter.value))
+  }
+
   if (searchQuery.value) {
     const q = searchQuery.value.toLowerCase()
     result = result.filter(a => 
@@ -131,6 +141,39 @@ const filteredAthletes = computed(() => {
 
   return result
 })
+
+const exportToExcel = () => {
+  const data = filteredAthletes.value.map((a, index) => ({
+    'ลำดับ': index + 1,
+    'รหัสนิสิต': a.student_id || '-',
+    'ชื่อ-นามสกุล': a.full_name,
+    'เพศ': a.gender,
+    'คณะ/สังกัด': a.faculties?.fac_name || '-',
+    'รายการที่ลงแข่ง': a.eventList.join(', '),
+    'ลายมือชื่อ': '' // เว้นว่างสำหรับเซ็นชื่อ
+  }))
+
+  const ws = XLSX.utils.json_to_sheet(data)
+  
+  // ปรับความกว้างคอลัมน์
+  const wscols = [
+    { wch: 8 },  // ลำดับ
+    { wch: 15 }, // รหัส
+    { wch: 30 }, // ชื่อ
+    { wch: 8 },  // เพศ
+    { wch: 25 }, // คณะ
+    { wch: 40 }, // รายการ
+    { wch: 20 }, // ลายมือชื่อ
+  ]
+  ws['!cols'] = wscols
+
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, 'รายชื่อนักกีฬา')
+  
+  const fileName = `รายชื่อนักกีฬา_${facultyFilter.value === 'ALL' ? 'ทั้งหมด' : faculties.value.find(f => f.fac_id === parseInt(facultyFilter.value))?.fac_name || 'คณะ'}_${eventFilter.value === 'ALL' ? 'ทุกรายการ' : eventFilter.value}.xlsx`
+  XLSX.writeFile(wb, fileName)
+}
+
 </script>
 
 <template>
@@ -138,6 +181,15 @@ const filteredAthletes = computed(() => {
     <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
       <div class="flex items-center gap-4">
         <h2 class="text-xl font-bold text-gray-800">รายชื่อนักกีฬาทั้งหมด ({{ filteredAthletes.length }} คน)</h2>
+        <button 
+          v-if="filteredAthletes.length > 0"
+          @click="exportToExcel"
+          class="px-3 py-1.5 bg-green-100 text-green-700 hover:bg-green-200 rounded-md text-sm font-medium transition flex items-center"
+          title="ส่งออกใบเซ็นชื่อเป็น Excel"
+        >
+          <Download class="w-4 h-4 mr-1" />
+          ส่งออก Excel
+        </button>
         <button 
           v-if="athletes.length > 0"
           @click="deleteAllAthletes"
@@ -149,6 +201,16 @@ const filteredAthletes = computed(() => {
       </div>
       
       <div class="flex flex-col sm:flex-row gap-2">
+        <select 
+          v-model="eventFilter" 
+          class="border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500 py-2 pl-3 pr-10"
+        >
+          <option value="ALL">ทุกรายการ (ระยะ)</option>
+          <option v-for="e in events" :key="e" :value="e">
+            {{ e }}
+          </option>
+        </select>
+
         <select 
           v-model="facultyFilter" 
           class="border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500 py-2 pl-3 pr-10"
