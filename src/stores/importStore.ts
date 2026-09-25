@@ -62,12 +62,19 @@ export const useImportStore = defineStore('import', () => {
     }
   }
 
+  const mapGender = (g: any) => {
+    const str = String(g || '').trim().toUpperCase()
+    if (str === 'ชาย' || str === 'MALE' || str === 'ช') return 'M'
+    if (str === 'หญิง' || str === 'FEMALE' || str === 'ญ') return 'F'
+    return str
+  }
+
   const processIndividuals = async (rows: any[], allEvents: any[], importedEventNames: Set<string>, cache: any) => {
     let importedCount = 0
     for (const row of rows) {
       const studentId = String(row.student_id || '').trim()
-      const fullName = String(row.full_name || '').trim()
-      const gender = String(row.gender || '').trim().toUpperCase()
+      const fullName = String(row.full_name || '').replace(/\s+/g, ' ').trim()
+      const gender = mapGender(row.gender)
       const facName = String(row.faculty_name || '').trim()
       const studyYear = parseInt(row.study_year) || null
       const eventName = String(row.event_name || '').trim()
@@ -128,31 +135,49 @@ export const useImportStore = defineStore('import', () => {
       // 4. Upsert Athlete
       let athleteId = null
       
-      if (cache.athletes.has(fullName)) {
-        athleteId = cache.athletes.get(fullName)
-        await supabase.from('athletes').update({ gender, faculty_id: facId, study_year: studyYear }).eq('athlete_id', athleteId)
+      const cacheKey = studentId ? `std_${studentId}` : `name_${fullName}`
+      if (cache.athletes.has(cacheKey)) {
+        athleteId = cache.athletes.get(cacheKey)
+        const updateData: any = { gender, faculty_id: facId, study_year: studyYear }
+        if (studentId) updateData.student_id = studentId
+        await supabase.from('athletes').update(updateData).eq('athlete_id', athleteId)
       } else {
-        const { data: nameData } = await supabase.from('athletes').select('athlete_id').eq('full_name', fullName).maybeSingle()
-        if (nameData) {
-          athleteId = nameData.athlete_id
-          cache.athletes.set(fullName, athleteId)
-          await supabase.from('athletes').update({ gender, faculty_id: facId, study_year: studyYear }).eq('athlete_id', athleteId)
+        let existingAthlete = null
+        if (studentId) {
+          const { data } = await supabase.from('athletes').select('athlete_id').eq('student_id', studentId).limit(1).maybeSingle()
+          existingAthlete = data
+        }
+        if (!existingAthlete && fullName) {
+          const { data } = await supabase.from('athletes').select('athlete_id').eq('full_name', fullName).limit(1).maybeSingle()
+          existingAthlete = data
+        }
+
+        if (existingAthlete) {
+          athleteId = existingAthlete.athlete_id
+          cache.athletes.set(`name_${fullName}`, athleteId)
+          if (studentId) cache.athletes.set(`std_${studentId}`, athleteId)
+          
+          const updateData: any = { gender, faculty_id: facId, study_year: studyYear }
+          if (studentId) updateData.student_id = studentId
+          await supabase.from('athletes').update(updateData).eq('athlete_id', athleteId)
         } else {
           const { data: newA, error: insErr } = await supabase.from('athletes').insert({
             student_id: studentId || null, full_name: fullName, gender, faculty_id: facId, study_year: studyYear
-          }).select('athlete_id').single()
+          }).select('athlete_id').maybeSingle()
           
-          if (insErr && insErr.code === '23505') { // Unique constraint violation (likely student_id)
+          if (insErr && insErr.code === '23505') { // Unique constraint violation
             const { data: retryA } = await supabase.from('athletes').insert({
               student_id: null, full_name: fullName, gender, faculty_id: facId, study_year: studyYear
-            }).select('athlete_id').single()
+            }).select('athlete_id').maybeSingle()
             if (retryA) {
               athleteId = retryA.athlete_id
-              cache.athletes.set(fullName, athleteId)
+              cache.athletes.set(`name_${fullName}`, athleteId)
+              if (studentId) cache.athletes.set(`std_${studentId}`, athleteId)
             }
           } else if (newA) {
             athleteId = newA.athlete_id
-            cache.athletes.set(fullName, athleteId)
+            cache.athletes.set(`name_${fullName}`, athleteId)
+            if (studentId) cache.athletes.set(`std_${studentId}`, athleteId)
           }
         }
       }
@@ -193,12 +218,17 @@ export const useImportStore = defineStore('import', () => {
     const teamGroups = {} as Record<string, any[]>
     for (const r of rows) {
       const team = String(r.team_name || '').trim()
+      const event = String(r.event_name || '').trim()
+      const round = String(r.round_name || '').trim()
       if (!team) continue
-      if (!teamGroups[team]) teamGroups[team] = []
-      teamGroups[team].push(r)
+      
+      const groupKey = `${team}|||${event}|||${round}`
+      if (!teamGroups[groupKey]) teamGroups[groupKey] = []
+      teamGroups[groupKey].push(r)
     }
 
-    for (const [teamName, members] of Object.entries(teamGroups)) {
+    for (const [_, members] of Object.entries(teamGroups)) {
+      const teamName = String(members[0].team_name || '').trim()
       const first = members[0]
       const facName = String(first.faculty_name || '').trim()
       const eventName = String(first.event_name || '').trim()
@@ -210,7 +240,7 @@ export const useImportStore = defineStore('import', () => {
       const normalizedSearchName = normalizeName(eventName)
       
       // Determine predominant team gender (if not mixed)
-      const teamGender = members.map(m => String(m.gender || '').trim().toUpperCase()).find(g => g === 'M' || g === 'F') || 'M'
+      const teamGender = members.map(m => mapGender(m.gender)).find(g => g === 'M' || g === 'F') || 'M'
       
       let eventData = allEvents.find((e: any) => 
         normalizeName(e.event_name) === normalizedSearchName &&
@@ -223,24 +253,28 @@ export const useImportStore = defineStore('import', () => {
 
       // Check Mixed relay rules if the matched event is Mixed or if eventName contains 'ผสม'
       if (eventData.gender === 'Mixed' || eventName.includes('ผสม')) {
-        const males = members.filter(m => String(m.gender).trim().toUpperCase() === 'M').length
-        const females = members.filter(m => String(m.gender).trim().toUpperCase() === 'F').length
-        if (males !== 2 || females !== 2) {
-          throw new Error(`ทีม "${teamName}" ในรายการผสม ต้องมีชาย 2 และหญิง 2 คน (พบ ชาย:${males} หญิง:${females})`)
+        const males = members.filter(m => mapGender(m.gender) === 'M').length
+        const females = members.filter(m => mapGender(m.gender) === 'F').length
+        if (males < 2 || females < 2) {
+          throw new Error(`ทีม "${teamName}" ในรายการผสม ต้องมีชายอย่างน้อย 2 และหญิงอย่างน้อย 2 คน (พบ ชาย:${males} หญิง:${females})`)
         }
       }
 
       // 2. Check for Duplicate Team in Event
       const { data: existingTeam } = await supabase
         .from('race_results')
-        .select('result_id, relay_teams!inner(team_name), event_rounds!inner(event_id)')
+        .select('result_id, relay_team_id, relay_teams!inner(team_name), event_rounds!inner(event_id)')
         .eq('relay_teams.team_name', teamName)
         .eq('event_rounds.event_id', eventData.event_id)
         .limit(1)
 
       if (existingTeam && existingTeam.length > 0) {
-        importProgress.value += members.length
-        continue; // Skip duplicate team
+        // Clear old incomplete data to allow clean re-import
+        const oldTeamId = existingTeam[0].relay_team_id;
+        if (oldTeamId) {
+          await supabase.from('race_results').delete().eq('relay_team_id', oldTeamId);
+          await supabase.from('relay_teams').delete().eq('relay_team_id', oldTeamId);
+        }
       }
 
       // 3. Upsert Faculty
@@ -274,9 +308,12 @@ export const useImportStore = defineStore('import', () => {
       // 3. Insert Members
       for (const m of members) {
         const studentId = String(m.student_id || '').trim()
-        const fullName = String(m.full_name || '').trim()
-        const gender = String(m.gender || '').trim().toUpperCase()
-        const legOrder = parseInt(m.leg_order) || null
+        const fullName = String(m.full_name || '').replace(/\s+/g, ' ').trim()
+        const gender = mapGender(m.gender)
+        let legOrder = parseInt(m.leg_order) || null
+        if (legOrder && (legOrder < 1 || legOrder > 4)) {
+          legOrder = null
+        }
         const memberFacName = String(m.faculty_name || '').trim()
 
         if(!fullName) continue;
@@ -303,36 +340,56 @@ export const useImportStore = defineStore('import', () => {
         // Upsert Athlete
         let athleteId = null
         
-        if (cache.athletes.has(fullName)) {
-          athleteId = cache.athletes.get(fullName)
-          await supabase.from('athletes').update({ gender, faculty_id: memberFacId }).eq('athlete_id', athleteId)
+        const cacheKey = studentId ? `std_${studentId}` : `name_${fullName}`
+        if (cache.athletes.has(cacheKey)) {
+          athleteId = cache.athletes.get(cacheKey)
+          const updateData: any = { gender, faculty_id: memberFacId }
+          if (studentId) updateData.student_id = studentId
+          await supabase.from('athletes').update(updateData).eq('athlete_id', athleteId)
         } else {
-          const { data: nameData } = await supabase.from('athletes').select('athlete_id').eq('full_name', fullName).maybeSingle()
-          if (nameData) {
-            athleteId = nameData.athlete_id
-            cache.athletes.set(fullName, athleteId)
-            await supabase.from('athletes').update({ gender, faculty_id: memberFacId }).eq('athlete_id', athleteId)
+          let existingAthlete = null
+          if (studentId) {
+            const { data } = await supabase.from('athletes').select('athlete_id').eq('student_id', studentId).limit(1).maybeSingle()
+            existingAthlete = data
+          }
+          if (!existingAthlete && fullName) {
+            const { data } = await supabase.from('athletes').select('athlete_id').eq('full_name', fullName).limit(1).maybeSingle()
+            existingAthlete = data
+          }
+
+          if (existingAthlete) {
+            athleteId = existingAthlete.athlete_id
+            cache.athletes.set(`name_${fullName}`, athleteId)
+            if (studentId) cache.athletes.set(`std_${studentId}`, athleteId)
+            
+            const updateData: any = { gender, faculty_id: memberFacId }
+            if (studentId) updateData.student_id = studentId
+            await supabase.from('athletes').update(updateData).eq('athlete_id', athleteId)
           } else {
             const { data: newA, error: insErr } = await supabase.from('athletes').insert({
               student_id: studentId || null, full_name: fullName, gender, faculty_id: memberFacId
-            }).select('athlete_id').single()
+            }).select('athlete_id').maybeSingle()
             
-            if (insErr && insErr.code === '23505') { // Unique constraint violation (likely student_id)
+            if (insErr && insErr.code === '23505') { // Unique constraint violation
               const { data: retryA } = await supabase.from('athletes').insert({
                 student_id: null, full_name: fullName, gender, faculty_id: memberFacId
-              }).select('athlete_id').single()
+              }).select('athlete_id').maybeSingle()
               if (retryA) {
                 athleteId = retryA.athlete_id
-                cache.athletes.set(fullName, athleteId)
+                cache.athletes.set(`name_${fullName}`, athleteId)
+                if (studentId) cache.athletes.set(`std_${studentId}`, athleteId)
               }
             } else if (newA) {
               athleteId = newA.athlete_id
-              cache.athletes.set(fullName, athleteId)
+              cache.athletes.set(`name_${fullName}`, athleteId)
+              if (studentId) cache.athletes.set(`std_${studentId}`, athleteId)
             }
           }
         }
 
-        if (athleteId && legOrder) {
+
+
+        if (athleteId) {
           await supabase.from('relay_members').insert({
             relay_team_id: relayTeamId,
             athlete_id: athleteId,
