@@ -34,18 +34,18 @@ const groupedRounds = computed(() => {
   return groups
 })
 
-const expandedRoundId = ref<number | null>(null)
-const roundParticipants = ref<any[]>([])
-const loadingParticipants = ref(false)
+const expandedRounds = ref<Set<number>>(new Set())
+const roundParticipants = ref<Record<number, any[]>>({})
+const loadingParticipants = ref<Record<number, boolean>>({})
 
 const toggleParticipants = async (roundId: number) => {
-  if (expandedRoundId.value === roundId) {
-    expandedRoundId.value = null
+  if (expandedRounds.value.has(roundId)) {
+    expandedRounds.value.delete(roundId)
     return
   }
   
-  expandedRoundId.value = roundId
-  loadingParticipants.value = true
+  expandedRounds.value.add(roundId)
+  loadingParticipants.value[roundId] = true
   
   const { data, error } = await supabase.from('race_results')
     .select(`
@@ -58,12 +58,13 @@ const toggleParticipants = async (roundId: number) => {
     
   if (error) {
     alert('Failed to load participants: ' + error.message)
-    loadingParticipants.value = false
+    loadingParticipants.value[roundId] = false
+    expandedRounds.value.delete(roundId)
     return
   }
   
-  roundParticipants.value = data || []
-  loadingParticipants.value = false
+  roundParticipants.value[roundId] = data || []
+  loadingParticipants.value[roundId] = false
 }
 
 const deleteAllRounds = async () => {
@@ -305,16 +306,16 @@ const deleteRound = async (roundId: number, roundName: string) => {
                 >
                   <Users class="w-4 h-4" />
                   <span class="hidden sm:inline">ดูรายชื่อ</span>
-                  <ChevronDown v-if="expandedRoundId !== round.round_id" class="w-4 h-4" />
+                  <ChevronDown v-if="!expandedRounds.has(round.round_id)" class="w-4 h-4" />
                   <ChevronUp v-else class="w-4 h-4" />
                 </button>
               </div>
               </div>
               
               <!-- Participants Sub-list -->
-              <div v-if="expandedRoundId === round.round_id" class="bg-blue-50/30 p-4 border-t border-gray-100">
-                <div v-if="loadingParticipants" class="text-sm text-gray-500 text-center py-4">กำลังโหลดรายชื่อ...</div>
-                <div v-else-if="roundParticipants.length === 0" class="text-sm text-gray-500 text-center py-4">ยังไม่มีนักกีฬาในรอบนี้</div>
+              <div v-if="expandedRounds.has(round.round_id)" class="bg-blue-50/30 p-4 border-t border-gray-100">
+                <div v-if="loadingParticipants[round.round_id]" class="text-sm text-gray-500 text-center py-4">กำลังโหลดรายชื่อ...</div>
+                <div v-else-if="!roundParticipants[round.round_id] || roundParticipants[round.round_id].length === 0" class="text-sm text-gray-500 text-center py-4">ยังไม่มีนักกีฬาในรอบนี้</div>
                 <div v-else class="overflow-x-auto">
                   <table class="min-w-full text-sm text-left">
                     <thead class="text-xs text-gray-500 uppercase bg-gray-100/60 rounded-t-lg">
@@ -325,7 +326,7 @@ const deleteRound = async (roundId: number, roundName: string) => {
                       </tr>
                     </thead>
                     <tbody class="divide-y divide-gray-100">
-                      <tr v-for="(p, index) in roundParticipants" :key="index" class="hover:bg-white/60 transition-colors">
+                      <tr v-for="(p, index) in roundParticipants[round.round_id]" :key="index" class="hover:bg-white/60 transition-colors">
                         <td class="px-4 py-2 text-gray-500">{{ p.lane_number || '-' }}</td>
                         <td class="px-4 py-2 font-medium text-gray-800">{{ p.athletes?.full_name || p.relay_teams?.team_name }}</td>
                         <td class="px-4 py-2 text-gray-600">{{ p.athletes?.faculties?.fac_name || p.relay_teams?.faculties?.fac_name || '-' }}</td>
