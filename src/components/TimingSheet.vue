@@ -5,7 +5,7 @@ import { parseTime, formatTime } from '../utils/timeFormat'
 import AdvanceRoundModal from './AdvanceRoundModal.vue'
 import AddParticipantModal from './AddParticipantModal.vue'
 import EditParticipantModal from './EditParticipantModal.vue'
-import { Trophy, PlusCircle, UserPlus, Trash2, Pencil } from 'lucide-vue-next'
+import { Trophy, PlusCircle, UserPlus, Trash2, Pencil, Printer } from 'lucide-vue-next'
 import { supabase } from '../lib/supabaseClient'
 
 const raceStore = useRaceStore()
@@ -301,11 +301,20 @@ const removeResult = async (resultId: number) => {
     alert('เกิดข้อผิดพลาด: ' + err.message)
   }
 }
+
+const printSheet = () => {
+  window.print()
+}
 </script>
 
 <template>
   <div class="space-y-6">
-    <div class="flex flex-col md:flex-row md:items-end space-y-4 md:space-y-0 md:space-x-4 bg-gray-50 p-4 rounded-lg border border-gray-200">
+    <div class="hidden print:block text-center mb-10 pt-4">
+      <h1 class="text-3xl font-extrabold text-black">{{ raceStore.events.find(e => e.event_id === raceStore.selectedEventId)?.event_name || 'ไม่ระบุรายการ' }}</h1>
+      <h2 class="text-2xl mt-3 text-gray-800">{{ raceStore.selectedRoundId === 'ALL' ? 'รวมทุก Heat' : raceStore.rounds.find(r => r.round_id === raceStore.selectedRoundId)?.round_name || '' }}</h2>
+    </div>
+
+    <div class="flex flex-col md:flex-row md:items-end space-y-4 md:space-y-0 md:space-x-4 bg-gray-50 p-4 rounded-lg border border-gray-200 print:hidden">
       <div class="flex-1">
         <label class="block text-sm font-medium text-gray-700 mb-1">รายการแข่งขัน</label>
         <select v-model="raceStore.selectedEventId" class="w-full border border-gray-300 px-3 py-2 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500">
@@ -346,8 +355,8 @@ const removeResult = async (resultId: number) => {
       </div>
     </div>
 
-    <div v-if="raceStore.selectedRoundId" class="bg-white border border-gray-200 rounded-lg overflow-hidden">
-      <div class="flex justify-between items-center p-4 border-b bg-gray-50 flex-wrap gap-4">
+    <div v-if="raceStore.selectedRoundId" class="bg-white border border-gray-200 rounded-lg overflow-hidden print:border-none print:shadow-none">
+      <div class="flex justify-between items-center p-4 border-b bg-gray-50 flex-wrap gap-4 print:hidden">
         <h3 class="font-semibold text-gray-800">
           {{ raceStore.selectedRoundId === 'ALL' ? 'จัดอันดับรวมทุก Heat' : 'ตารางบันทึกผล' }}
         </h3>
@@ -378,6 +387,10 @@ const removeResult = async (resultId: number) => {
             <button @click="openAdvanceModal" class="px-3 py-1.5 bg-indigo-100 text-indigo-700 hover:bg-indigo-200 border border-indigo-200 rounded text-sm font-medium transition">
               ส่งเข้ารอบ...
             </button>
+            <button v-if="raceStore.selectedRoundId !== 'ALL'" @click="printSheet" class="px-3 py-1.5 bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-200 rounded text-sm font-medium flex items-center transition">
+              <Printer class="w-4 h-4 mr-1" />
+              พิมพ์ใบบันทึกผล
+            </button>
             <button v-if="raceStore.selectedRoundId !== 'ALL'" @click="saveResults" :disabled="saving" class="px-4 py-1.5 bg-blue-600 text-white hover:bg-blue-700 rounded text-sm font-medium transition">
               {{ saving ? 'กำลังบันทึก...' : 'บันทึกข้อมูล' }}
             </button>
@@ -387,29 +400,29 @@ const removeResult = async (resultId: number) => {
 
       <div class="overflow-x-auto">
         <table class="w-full text-left text-sm text-gray-600">
-          <thead class="bg-gray-100 text-gray-700">
+          <thead class="bg-gray-100 text-gray-700 print:bg-transparent print:border-b-2 print:border-black print:text-base">
             <tr>
-              <th class="px-4 py-3 w-16 text-center">เข้ารอบ</th>
+              <th class="px-4 py-3 w-16 text-center print:hidden">เข้ารอบ</th>
               <th class="px-4 py-3 w-16 text-center">ลู่</th>
-              <th class="px-4 py-3">ชื่อ/ทีม</th>
+              <th class="px-4 py-3 print:w-2/5">ชื่อ/ทีม</th>
               <th v-if="raceStore.selectedRoundId === 'ALL'" class="px-4 py-3">จากรอบ</th>
-              <th class="px-4 py-3 w-40">เวลา</th>
-              <th class="px-4 py-3 w-32">สถานะ</th>
-              <th class="px-4 py-3 w-24 text-center">อันดับ</th>
-              <th class="px-4 py-3 w-24 text-center">จัดการ</th>
+              <th class="px-4 py-3 w-40 print:w-1/5">เวลา</th>
+              <th class="px-4 py-3 w-32 print:w-1/5">สถานะ</th>
+              <th class="px-4 py-3 w-24 text-center print:w-1/5">อันดับ</th>
+              <th class="px-4 py-3 w-24 text-center print:hidden">จัดการ</th>
             </tr>
           </thead>
-          <tbody class="divide-y divide-gray-200">
-            <tr v-for="row in raceStore.activeResults" :key="row.result_id" class="hover:bg-gray-50">
-              <td class="px-4 py-2 text-center">
+          <tbody class="divide-y divide-gray-200 print:divide-gray-400">
+            <tr v-for="row in raceStore.activeResults" :key="row.result_id" class="hover:bg-gray-50 print:hover:bg-transparent print:text-base">
+              <td class="px-4 py-2 text-center print:hidden">
                 <input 
                   type="checkbox" 
                   v-model="row.selectedForAdvance"
                   class="w-5 h-5 rounded border-gray-400 text-blue-600 focus:ring-blue-500 cursor-pointer"
                 />
               </td>
-              <td class="px-4 py-2 text-center font-medium">{{ row.lane_number || '-' }}</td>
-              <td class="px-4 py-2 text-gray-900">
+              <td class="px-4 py-2 print:py-5 text-center font-medium">{{ row.lane_number || '-' }}</td>
+              <td class="px-4 py-2 print:py-5 text-gray-900">
                 <div v-if="row.athletes" class="font-medium">
                   {{ row.athletes.full_name }}
                 </div>
@@ -427,11 +440,11 @@ const removeResult = async (resultId: number) => {
                   ไม่ระบุ
                 </div>
               </td>
-              <td v-if="raceStore.selectedRoundId === 'ALL'" class="px-4 py-2 text-gray-500 text-xs">
+              <td v-if="raceStore.selectedRoundId === 'ALL'" class="px-4 py-2 print:py-5 text-gray-500 text-xs">
                 {{ (row as any).event_rounds?.round_name || '-' }}
               </td>
-              <td class="px-4 py-2">
-                <div class="flex items-center space-x-1">
+              <td class="px-4 py-2 print:py-5">
+                <div class="flex items-center space-x-1 print:hidden">
                   <input 
                     type="text" 
                     v-model="row.timeInput"
@@ -450,29 +463,32 @@ const removeResult = async (resultId: number) => {
                     <option value="ชั่วโมง">ชม.</option>
                   </select>
                 </div>
+                <div class="hidden print:block border-b-[1.5px] border-gray-400 w-full max-w-[100px] h-6"></div>
               </td>
-              <td class="px-4 py-2">
+              <td class="px-4 py-2 print:py-5">
                 <select 
                   v-model="row.status"
                   @change="handleStatusChange(row)"
                   :disabled="raceStore.selectedRoundId === 'ALL'"
-                  class="w-full border border-gray-300 px-2 py-1 rounded focus:ring-blue-500 focus:border-blue-500 text-sm disabled:bg-gray-100"
+                  class="w-full border border-gray-300 px-2 py-1 rounded focus:ring-blue-500 focus:border-blue-500 text-sm disabled:bg-gray-100 print:hidden"
                 >
                   <option value="OK">OK</option>
                   <option value="DNS">DNS</option>
                   <option value="DNF">DNF</option>
                   <option value="DQ">DQ</option>
                 </select>
+                <div class="hidden print:block border-b-[1.5px] border-gray-400 w-full max-w-[80px] h-6"></div>
               </td>
-              <td class="px-4 py-2 text-center">
+              <td class="px-4 py-2 print:py-5 text-center">
                 <input 
                   type="number" 
                   v-model.number="row.rank"
                   :disabled="raceStore.selectedRoundId === 'ALL'"
-                  class="w-16 border border-gray-300 px-2 py-1 rounded text-center focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100"
+                  class="w-16 border border-gray-300 px-2 py-1 rounded text-center focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 print:hidden"
                 />
+                <div class="hidden print:block border-b-[1.5px] border-gray-400 w-16 h-6 mx-auto"></div>
               </td>
-              <td class="px-4 py-2 text-center space-x-1 whitespace-nowrap">
+              <td class="px-4 py-2 text-center space-x-1 whitespace-nowrap print:hidden">
                 <button 
                   v-if="raceStore.selectedRoundId !== 'ALL'"
                   @click="openEditModal(row)"

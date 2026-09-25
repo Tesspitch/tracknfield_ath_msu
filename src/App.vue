@@ -44,7 +44,7 @@ const currentTab = ref<'import' | 'timing' | 'results' | 'events' | 'rounds' | '
   <div v-else class="min-h-screen bg-gray-50 flex flex-col md:flex-row font-sans">
     
     <!-- Mobile Header -->
-    <div class="md:hidden bg-[#0f4b9e] text-white flex items-center p-4 shadow-md sticky top-0 z-20 gap-3">
+    <div class="md:hidden bg-[#0f4b9e] text-white flex items-center p-4 shadow-md sticky top-0 z-20 gap-3 print:hidden">
       <button @click="isSidebarOpen = true" class="p-2 -ml-2 text-white hover:bg-[#0a3574] rounded-lg transition-colors">
         <Menu class="w-6 h-6" />
       </button>
@@ -61,7 +61,7 @@ const currentTab = ref<'import' | 'timing' | 'results' | 'events' | 'rounds' | '
     <!-- Sidebar -->
     <aside 
       :class="[
-        'fixed inset-y-0 left-0 z-40 w-64 bg-white border-r border-gray-200 flex-shrink-0 flex flex-col shadow-2xl md:shadow-sm md:h-screen md:sticky top-0 transform transition-transform duration-300 ease-in-out md:translate-x-0',
+        'fixed inset-y-0 left-0 z-40 w-64 bg-white border-r border-gray-200 flex-shrink-0 flex flex-col shadow-2xl md:shadow-sm md:h-screen md:sticky top-0 transform transition-transform duration-300 ease-in-out md:translate-x-0 print:hidden',
         isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
       ]"
     >
@@ -140,9 +140,9 @@ const currentTab = ref<'import' | 'timing' | 'results' | 'events' | 'rounds' | '
     </aside>
 
     <!-- Main Content -->
-    <main class="flex-1 p-4 md:p-8 min-w-0">
+    <main class="flex-1 p-4 md:p-8 min-w-0 print:p-0">
       <div class="max-w-6xl mx-auto">
-        <div class="bg-white rounded-2xl shadow-sm border border-gray-200/60 p-6 md:p-8 min-h-[calc(100vh-4rem)]">
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-200/60 p-6 md:p-8 min-h-[calc(100vh-4rem)] print:border-none print:shadow-none print:p-0">
           <KeepAlive>
             <EventManager v-if="currentTab === 'events'" />
             <RoundManager v-else-if="currentTab === 'rounds'" />
