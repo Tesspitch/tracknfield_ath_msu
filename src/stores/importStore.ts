@@ -351,9 +351,10 @@ export const useImportStore = defineStore('import', () => {
         const studentId = String(m.student_id || '').trim()
         const fullName = String(m.full_name || '').replace(/\s+/g, ' ').trim()
         const gender = mapGender(m.gender)
-        let legOrder = parseInt(m.leg_order) || null
-        if (legOrder && (legOrder < 1 || legOrder > 4)) {
-          legOrder = null
+        let legOrder = parseInt(m.leg_order)
+        if (isNaN(legOrder) || legOrder < 1) {
+          // If leg_order is empty, assign it based on the index in the array + 1
+          legOrder = members.indexOf(m) + 1
         }
         const memberFacName = String(m.faculty_name || '').trim()
 

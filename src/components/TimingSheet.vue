@@ -417,7 +417,7 @@ const removeResult = async (resultId: number) => {
                   <div class="font-medium text-blue-700">{{ row.relay_teams.team_name }}</div>
                   <div v-if="row.relay_teams.relay_members && row.relay_teams.relay_members.length" class="text-xs text-gray-500 mt-1 pl-2 border-l-2 border-gray-200">
                     <div v-for="(m, idx) in row.relay_teams.relay_members.slice().sort((a: any, b: any) => (a.leg_order || 99) - (b.leg_order || 99))" :key="m.athletes?.student_id || m.athletes?.full_name || idx">
-                      <span v-if="m.leg_order">ไม้ {{ m.leg_order }}:</span>
+                      <span v-if="m.leg_order <= 4">ไม้ {{ m.leg_order }}:</span>
                       <span v-else>สำรอง:</span>
                       {{ m.athletes?.full_name || 'ไม่ระบุ' }}
                     </div>

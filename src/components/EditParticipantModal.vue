@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import { GripVertical } from 'lucide-vue-next'
+import { GripVertical, Trash2 } from 'lucide-vue-next'
 import { supabase } from '../lib/supabaseClient'
 import { useRaceStore, type EnhancedRaceResult } from '../stores/raceStore'
 
@@ -55,13 +55,27 @@ watch(() => [props.isOpen, props.existingData], ([isOpen, data]) => {
     }
     
     if (isRelay.value && rData.relay_teams?.relay_members) {
-      rData.relay_teams.relay_members.forEach(m => {
-        const idx = m.leg_order - 1
-        if (idx >= 0 && idx < 4) {
-          f.relayMembers[idx].name = m.athletes?.full_name || ''
-          f.relayMembers[idx].student_id = m.athletes?.student_id || ''
-        }
-      })
+      const dbMembers = [...rData.relay_teams.relay_members]
+      dbMembers.sort((a: any, b: any) => (a.leg_order || 99) - (b.leg_order || 99))
+      
+      const newMembers = dbMembers.map((m, i) => ({
+        id: i + 1,
+        student_id: m.athletes?.student_id || '',
+        name: m.athletes?.full_name || '',
+        faculty: '',
+        gender: 'M',
+        leg_order: i + 1
+      }))
+      
+      while (newMembers.length < 4) {
+        newMembers.push({
+          id: newMembers.length + 1,
+          student_id: '', name: '', faculty: '', gender: 'M',
+          leg_order: newMembers.length + 1
+        })
+      }
+      
+      f.relayMembers = newMembers
     }
     form.value = f
   }
@@ -93,6 +107,23 @@ const onDrop = (dropIdx: number) => {
   })
   
   draggedItemIndex.value = null
+}
+
+const addRelayMember = () => {
+  const newId = form.value.relayMembers.length + 1
+  form.value.relayMembers.push({
+    id: newId,
+    student_id: '',
+    name: '',
+    faculty: '',
+    gender: 'M',
+    leg_order: newId
+  })
+}
+
+const removeRelayMember = (idx: number) => {
+  form.value.relayMembers.splice(idx, 1)
+  form.value.relayMembers.forEach((m, i) => m.leg_order = i + 1)
 }
 
 const handleSubmit = async () => {
@@ -282,9 +313,15 @@ const handleSubmit = async () => {
             @dragenter.prevent
             @drop="onDrop(idx)"
           >
-            <div class="text-sm font-semibold text-gray-600 mb-2 flex items-center">
-              <GripVertical class="w-4 h-4 mr-1 text-gray-400" />
-              ไม้ {{ member.leg_order }}
+            <div class="text-sm font-semibold text-gray-600 mb-2 flex items-center justify-between">
+              <div class="flex items-center">
+                <GripVertical class="w-4 h-4 mr-1 text-gray-400" />
+                <span v-if="member.leg_order <= 4">ไม้ {{ member.leg_order }}</span>
+                <span v-else class="text-orange-500">สำรอง (ไม้ {{ member.leg_order }})</span>
+              </div>
+              <button v-if="form.relayMembers.length > 4" @click="removeRelayMember(idx)" type="button" class="text-red-400 hover:text-red-600">
+                <Trash2 class="w-4 h-4" />
+              </button>
             </div>
             <div class="grid grid-cols-2 gap-2 mb-2">
               <input v-model="member.student_id" type="text" placeholder="รหัสนักศึกษา" class="border border-gray-300 px-2 py-1 rounded text-sm w-full" />
@@ -298,6 +335,15 @@ const handleSubmit = async () => {
               </select>
             </div>
           </div>
+          
+          <button 
+            type="button" 
+            @click="addRelayMember" 
+            v-if="form.relayMembers.length < 6"
+            class="w-full mt-2 py-2 border-2 border-dashed border-gray-300 rounded text-gray-500 hover:text-blue-600 hover:border-blue-400 transition flex items-center justify-center text-sm font-medium"
+          >
+            + เพิ่มนักกีฬาในทีม
+          </button>
         </div>
         
         <div class="pt-4 flex justify-end space-x-3">
