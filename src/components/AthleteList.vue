@@ -131,7 +131,12 @@ const filteredAthletes = computed(() => {
   }
 
   if (eventFilter.value !== 'ALL') {
-    result = result.filter(a => a.eventList.includes(eventFilter.value))
+    result = result
+      .filter(a => a.eventList.includes(eventFilter.value))
+      .map(a => ({
+        ...a,
+        eventList: [eventFilter.value]
+      }))
   }
 
   if (searchQuery.value) {
@@ -182,57 +187,62 @@ const exportToExcel = () => {
 
 <template>
   <div class="space-y-6">
-    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
-      <div class="flex items-center gap-4">
+    <div class="flex flex-col md:flex-row md:items-start justify-between gap-4">
+      <div class="flex items-center gap-4 mt-2">
         <h2 class="text-xl font-bold text-gray-800">รายชื่อนักกีฬาทั้งหมด ({{ filteredAthletes.length }} คน)</h2>
-        <button 
-          v-if="filteredAthletes.length > 0"
-          @click="exportToExcel"
-          class="px-3 py-1.5 bg-green-100 text-green-700 hover:bg-green-200 rounded-md text-sm font-medium transition flex items-center"
-          title="ส่งออกใบเซ็นชื่อเป็น Excel"
-        >
-          <Download class="w-4 h-4 mr-1" />
-          ส่งออก Excel
-        </button>
-        <button 
-          v-if="athletes.length > 0"
-          @click="deleteAllAthletes"
-          class="px-3 py-1.5 bg-red-100 text-red-700 hover:bg-red-200 rounded-md text-sm font-medium transition flex items-center"
-        >
-          <Trash2 class="w-4 h-4 mr-1" />
-          ลบนักกีฬาทั้งหมด
-        </button>
       </div>
       
-      <div class="flex flex-col sm:flex-row gap-2">
-        <select 
-          v-model="eventFilter" 
-          class="border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500 py-2 pl-3 pr-10"
-        >
-          <option value="ALL">ทุกรายการ (ระยะ)</option>
-          <option v-for="e in events" :key="e" :value="e">
-            {{ e }}
-          </option>
-        </select>
+      <div class="flex flex-col gap-3">
+        <div class="flex flex-col sm:flex-row gap-2">
+          <select 
+            v-model="eventFilter" 
+            class="border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500 py-2 pl-3 pr-10"
+          >
+            <option value="ALL">ทุกรายการ (ระยะ)</option>
+            <option v-for="e in events" :key="e" :value="e">
+              {{ e }}
+            </option>
+          </select>
 
-        <select 
-          v-model="facultyFilter" 
-          class="border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500 py-2 pl-3 pr-10"
-        >
-          <option value="ALL">ทุกคณะ/สังกัด</option>
-          <option v-for="f in faculties" :key="f.fac_id" :value="f.fac_id">
-            {{ f.fac_name }}
-          </option>
-        </select>
-        
-        <div class="relative">
-          <input 
-            v-model="searchQuery" 
-            type="text" 
-            placeholder="ค้นหาชื่อ, รหัส, รายการ..." 
-            class="w-full sm:w-64 border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500 py-2 pl-10 pr-3"
-          />
-          <Search class="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
+          <select 
+            v-model="facultyFilter" 
+            class="border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500 py-2 pl-3 pr-10"
+          >
+            <option value="ALL">ทุกคณะ/สังกัด</option>
+            <option v-for="f in faculties" :key="f.fac_id" :value="f.fac_id">
+              {{ f.fac_name }}
+            </option>
+          </select>
+          
+          <div class="relative">
+            <input 
+              v-model="searchQuery" 
+              type="text" 
+              placeholder="ค้นหาชื่อ, รหัส, รายการ..." 
+              class="w-full sm:w-64 border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500 py-2 pl-10 pr-3"
+            />
+            <Search class="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
+          </div>
+        </div>
+
+        <div class="flex justify-end gap-2">
+          <button 
+            v-if="filteredAthletes.length > 0"
+            @click="exportToExcel"
+            class="px-3 py-1.5 bg-green-100 text-green-700 hover:bg-green-200 rounded-md text-sm font-medium transition flex items-center"
+            title="ส่งออกใบเซ็นชื่อเป็น Excel"
+          >
+            <Download class="w-4 h-4 mr-1" />
+            ส่งออก Excel
+          </button>
+          <button 
+            v-if="athletes.length > 0"
+            @click="deleteAllAthletes"
+            class="px-3 py-1.5 bg-red-100 text-red-700 hover:bg-red-200 rounded-md text-sm font-medium transition flex items-center"
+          >
+            <Trash2 class="w-4 h-4 mr-1" />
+            ลบนักกีฬาทั้งหมด
+          </button>
         </div>
       </div>
     </div>
