@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, onActivated, computed } from 'vue'
 import { supabase } from '../lib/supabaseClient'
 import { Search, Trash2, Download } from 'lucide-vue-next'
 import * as XLSX from 'xlsx'
@@ -116,6 +116,10 @@ const deleteAllAthletes = async () => {
 }
 
 onMounted(() => {
+  fetchAthletes()
+})
+
+onActivated(() => {
   fetchAthletes()
 })
 

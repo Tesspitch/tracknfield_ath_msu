@@ -146,7 +146,7 @@ const currentTab = ref<'import' | 'timing' | 'results' | 'events' | 'rounds' | '
           <KeepAlive>
             <EventManager v-if="currentTab === 'events'" />
             <RoundManager v-else-if="currentTab === 'rounds'" />
-            <ExcelUploader v-else-if="currentTab === 'import'" />
+            <ExcelUploader v-else-if="currentTab === 'import'" @import-success="currentTab = 'athletes'" />
             <TimingSheet v-else-if="currentTab === 'timing'" />
             <ResultsViewer v-else-if="currentTab === 'results'" />
             <AthleteList v-else-if="currentTab === 'athletes'" />

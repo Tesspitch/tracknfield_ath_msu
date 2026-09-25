@@ -8,22 +8,30 @@ const importStore = useImportStore()
 const fileInput = ref<HTMLInputElement | null>(null)
 const dragOver = ref(false)
 
+const emit = defineEmits<{ (e: 'import-success'): void }>()
+
 const triggerUpload = () => {
   fileInput.value?.click()
 }
 
-const handleFileSelect = (event: Event) => {
+const handleFileSelect = async (event: Event) => {
   const target = event.target as HTMLInputElement
   if (target.files && target.files.length > 0) {
-    importStore.processExcel(target.files[0])
+    await importStore.processExcel(target.files[0])
     target.value = ''
+    if (!importStore.importError) {
+      emit('import-success')
+    }
   }
 }
 
-const handleDrop = (event: DragEvent) => {
+const handleDrop = async (event: DragEvent) => {
   dragOver.value = false
   if (event.dataTransfer?.files && event.dataTransfer.files.length > 0) {
-    importStore.processExcel(event.dataTransfer.files[0])
+    await importStore.processExcel(event.dataTransfer.files[0])
+    if (!importStore.importError) {
+      emit('import-success')
+    }
   }
 }
 

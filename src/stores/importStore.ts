@@ -32,6 +32,19 @@ export const useImportStore = defineStore('import', () => {
       const jsonIndiv = sheetIndividual ? XLSX.utils.sheet_to_json(sheetIndividual) : []
       const jsonRelay = sheetRelay ? XLSX.utils.sheet_to_json(sheetRelay) : []
       
+      const fillDown = (data: any[], columns: string[]) => {
+        const lastValues: Record<string, string> = {}
+        for (const row of data) {
+          for (const col of columns) {
+            const val = String(row[col] || '').trim()
+            if (val) lastValues[col] = val
+            else if (lastValues[col]) row[col] = lastValues[col]
+          }
+        }
+      }
+      fillDown(jsonIndiv, ['faculty_name', 'event_name', 'round_name'])
+      fillDown(jsonRelay, ['team_name', 'faculty_name', 'event_name', 'round_name'])
+
       importTotal.value = jsonIndiv.length + jsonRelay.length
       importProgress.value = 0
 
@@ -71,7 +84,21 @@ export const useImportStore = defineStore('import', () => {
 
   const processIndividuals = async (rows: any[], allEvents: any[], importedEventNames: Set<string>, cache: any) => {
     let importedCount = 0
+    
+    // Pre-process: split comma-separated events into multiple rows
+    const expandedRows = []
     for (const row of rows) {
+      const events = String(row.event_name || '').split(/[,/]/).map(e => e.trim()).filter(Boolean)
+      if (events.length === 0) {
+        expandedRows.push(row)
+      } else {
+        for (const ev of events) {
+          expandedRows.push({ ...row, event_name: ev })
+        }
+      }
+    }
+    
+    for (const row of expandedRows) {
       const studentId = String(row.student_id || '').trim()
       const fullName = String(row.full_name || '').replace(/\s+/g, ' ').trim()
       const gender = mapGender(row.gender)
@@ -215,8 +242,22 @@ export const useImportStore = defineStore('import', () => {
 
   const processRelays = async (rows: any[], allEvents: any[], importedEventNames: Set<string>, cache: any) => {
     let importedCount = 0
+    
+    // Pre-process: split comma-separated events into multiple rows
+    const expandedRows = []
+    for (const row of rows) {
+      const events = String(row.event_name || '').split(/[,/]/).map(e => e.trim()).filter(Boolean)
+      if (events.length === 0) {
+        expandedRows.push(row)
+      } else {
+        for (const ev of events) {
+          expandedRows.push({ ...row, event_name: ev })
+        }
+      }
+    }
+    
     const teamGroups = {} as Record<string, any[]>
-    for (const r of rows) {
+    for (const r of expandedRows) {
       const team = String(r.team_name || '').trim()
       const event = String(r.event_name || '').trim()
       const round = String(r.round_name || '').trim()
