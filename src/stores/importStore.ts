@@ -32,7 +32,7 @@ export const useImportStore = defineStore('import', () => {
       const jsonIndiv = sheetIndividual ? XLSX.utils.sheet_to_json(sheetIndividual) : []
       const jsonRelay = sheetRelay ? XLSX.utils.sheet_to_json(sheetRelay) : []
       
-      const fillDown = (data: any[], columns: string[]) => {
+      const fillDownIndiv = (data: any[], columns: string[]) => {
         const lastValues: Record<string, string> = {}
         for (const row of data) {
           for (const col of columns) {
@@ -42,8 +42,39 @@ export const useImportStore = defineStore('import', () => {
           }
         }
       }
-      fillDown(jsonIndiv, ['faculty_name', 'event_name', 'round_name'])
-      fillDown(jsonRelay, ['team_name', 'faculty_name', 'event_name', 'round_name'])
+      fillDownIndiv(jsonIndiv, ['faculty_name', 'event_name', 'round_name'])
+
+      const fillDownRelay = (data: any[]) => {
+        let lastTeam = ''
+        let lastFac = ''
+        let lastEvent = ''
+        let lastRound = ''
+        
+        for (const row of data) {
+          const team = String(row['team_name'] || '').trim()
+          
+          if (team) {
+            lastTeam = team
+            lastFac = String(row['faculty_name'] || '').trim()
+          } else {
+            row['team_name'] = lastTeam
+            if (!String(row['faculty_name'] || '').trim()) {
+               row['faculty_name'] = lastFac
+            } else {
+               lastFac = String(row['faculty_name'] || '').trim()
+            }
+          }
+
+          const event = String(row['event_name'] || '').trim()
+          if (event) lastEvent = event
+          else row['event_name'] = lastEvent
+
+          const round = String(row['round_name'] || '').trim()
+          if (round) lastRound = round
+          else row['round_name'] = lastRound
+        }
+      }
+      fillDownRelay(jsonRelay)
 
       importTotal.value = jsonIndiv.length + jsonRelay.length
       importProgress.value = 0
@@ -165,7 +196,9 @@ export const useImportStore = defineStore('import', () => {
       const cacheKey = studentId ? `std_${studentId}` : `name_${fullName}`
       if (cache.athletes.has(cacheKey)) {
         athleteId = cache.athletes.get(cacheKey)
-        const updateData: any = { gender, faculty_id: facId, study_year: studyYear }
+        const updateData: any = { gender }
+        if (facId !== null) updateData.faculty_id = facId
+        if (studyYear !== null) updateData.study_year = studyYear
         if (studentId) updateData.student_id = studentId
         await supabase.from('athletes').update(updateData).eq('athlete_id', athleteId)
       } else {
@@ -184,7 +217,9 @@ export const useImportStore = defineStore('import', () => {
           cache.athletes.set(`name_${fullName}`, athleteId)
           if (studentId) cache.athletes.set(`std_${studentId}`, athleteId)
           
-          const updateData: any = { gender, faculty_id: facId, study_year: studyYear }
+          const updateData: any = { gender }
+          if (facId !== null) updateData.faculty_id = facId
+          if (studyYear !== null) updateData.study_year = studyYear
           if (studentId) updateData.student_id = studentId
           await supabase.from('athletes').update(updateData).eq('athlete_id', athleteId)
         } else {
@@ -385,7 +420,8 @@ export const useImportStore = defineStore('import', () => {
         const cacheKey = studentId ? `std_${studentId}` : `name_${fullName}`
         if (cache.athletes.has(cacheKey)) {
           athleteId = cache.athletes.get(cacheKey)
-          const updateData: any = { gender, faculty_id: memberFacId }
+          const updateData: any = { gender }
+          if (memberFacId !== null) updateData.faculty_id = memberFacId
           if (studentId) updateData.student_id = studentId
           await supabase.from('athletes').update(updateData).eq('athlete_id', athleteId)
         } else {
@@ -404,7 +440,8 @@ export const useImportStore = defineStore('import', () => {
             cache.athletes.set(`name_${fullName}`, athleteId)
             if (studentId) cache.athletes.set(`std_${studentId}`, athleteId)
             
-            const updateData: any = { gender, faculty_id: memberFacId }
+            const updateData: any = { gender }
+            if (memberFacId !== null) updateData.faculty_id = memberFacId
             if (studentId) updateData.student_id = studentId
             await supabase.from('athletes').update(updateData).eq('athlete_id', athleteId)
           } else {
