@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { ref, onMounted, onActivated, computed } from 'vue'
 import { supabase } from '../lib/supabaseClient'
-import { Search, Trash2, Download } from 'lucide-vue-next'
+import { Search, Trash2, Download, Printer } from 'lucide-vue-next'
 import * as XLSX from 'xlsx'
+import logoUrl from '../assets/project_logo.jpg'
 
 const athletes = ref<any[]>([])
 const loading = ref(true)
@@ -162,7 +163,15 @@ const exportToExcel = () => {
     'ลายมือชื่อ': '' // เว้นว่างสำหรับเซ็นชื่อ
   }))
 
-  const ws = XLSX.utils.json_to_sheet(data)
+  const ws = XLSX.utils.json_to_sheet([])
+  XLSX.utils.sheet_add_json(ws, data, { origin: 'A5', skipHeader: false })
+  
+  XLSX.utils.sheet_add_aoa(ws, [
+    ['การแข่งขัน MSU TRACK RUNNING OPEN 2026'],
+    ['วันที่ 27 กันยายน 2569'],
+    [`รายชื่อนักกีฬา: ${facultyFilter.value === 'ALL' ? 'ทั้งหมด' : faculties.value.find(f => f.fac_id === parseInt(facultyFilter.value))?.fac_name || 'คณะ'} | รายการ: ${eventFilter.value === 'ALL' ? 'ทุกรายการ' : eventFilter.value}`],
+    []
+  ], { origin: 'A1' })
   
   // ปรับความกว้างคอลัมน์
   const wscols = [
@@ -181,6 +190,92 @@ const exportToExcel = () => {
   
   const fileName = `รายชื่อนักกีฬา_${facultyFilter.value === 'ALL' ? 'ทั้งหมด' : faculties.value.find(f => f.fac_id === parseInt(facultyFilter.value))?.fac_name || 'คณะ'}_${eventFilter.value === 'ALL' ? 'ทุกรายการ' : eventFilter.value}.xlsx`
   XLSX.writeFile(wb, fileName)
+}
+
+const exportToPDF = () => {
+  if (filteredAthletes.value.length === 0) {
+    alert('ไม่มีข้อมูลนักกีฬา')
+    return
+  }
+
+  const facultyText = facultyFilter.value === 'ALL' ? 'ทั้งหมด' : faculties.value.find(f => f.fac_id === parseInt(facultyFilter.value))?.fac_name || 'คณะ'
+  const eventText = eventFilter.value === 'ALL' ? 'ทุกรายการ' : eventFilter.value
+
+  let tableRows = ''
+  filteredAthletes.value.forEach((a, index) => {
+    tableRows += `
+      <tr>
+        <td style="border: 1px solid #333; padding: 10px 8px; text-align: center;">${index + 1}</td>
+        <td style="border: 1px solid #333; padding: 10px 8px; text-align: center;">${a.student_id || '-'}</td>
+        <td style="border: 1px solid #333; padding: 10px 8px;">${a.full_name}</td>
+        <td style="border: 1px solid #333; padding: 10px 8px; text-align: center;">${a.gender}</td>
+        <td style="border: 1px solid #333; padding: 10px 8px;">${a.faculties?.fac_name || '-'}</td>
+        <td style="border: 1px solid #333; padding: 10px 8px;">${a.eventList.join(', ')}</td>
+        <td style="border: 1px solid #333; padding: 10px 8px;"></td>
+      </tr>
+    `
+  })
+
+  const printWindow = window.open('', '_blank')
+  if (!printWindow) {
+    alert('กรุณาอนุญาตให้ Pop-up ทำงานเพื่อพิมพ์เอกสาร')
+    return
+  }
+
+  printWindow.document.write(`
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <title>AthleteList_${facultyText}_${eventText}</title>
+        <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;700&display=swap" rel="stylesheet">
+        <style>
+          body { font-family: 'Sarabun', Tahoma, sans-serif; padding: 20px; color: #000; }
+          .header-container { text-align: center; margin-bottom: 15px; }
+          .header-container img { height: 90px; margin-bottom: 10px; object-fit: contain; }
+          h2 { text-align: center; margin: 5px 0; font-size: 22px; }
+          h3 { text-align: center; margin: 5px 0; font-size: 18px; }
+          table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 15px; }
+          th { border: 1px solid #333; padding: 12px 8px; background-color: #f2f2f2; font-weight: bold; text-align: center; }
+          @media print {
+            @page { margin: 1cm; size: A4 landscape; }
+            body { padding: 0; }
+            th { background-color: #f2f2f2 !important; -webkit-print-color-adjust: exact; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="header-container">
+          <img src="${window.location.origin}${logoUrl}" alt="Logo" />
+          <h2>การแข่งขัน MSU TRACK RUNNING OPEN 2026</h2>
+          <h2>วันที่ 27 กันยายน 2569</h2>
+          <h3>รายชื่อนักกีฬา: ${facultyText} | รายการ: ${eventText}</h3>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 5%;">ลำดับ</th>
+              <th style="width: 10%;">รหัสนิสิต</th>
+              <th style="width: 20%;">ชื่อ-นามสกุล</th>
+              <th style="width: 5%;">เพศ</th>
+              <th style="width: 20%;">คณะ/สังกัด</th>
+              <th style="width: 25%;">รายการที่ลงแข่ง</th>
+              <th style="width: 15%;">ลายมือชื่อ</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${tableRows}
+          </tbody>
+        </table>
+        <script>
+          setTimeout(() => {
+            window.print();
+          }, 800);
+        <\/script>
+      </body>
+    </html>
+  `)
+  
+  printWindow.document.close()
 }
 
 </script>
@@ -228,12 +323,21 @@ const exportToExcel = () => {
         <div class="flex justify-end gap-2">
           <button 
             v-if="filteredAthletes.length > 0"
+            @click="exportToPDF"
+            class="px-3 py-1.5 bg-indigo-100 text-indigo-700 hover:bg-indigo-200 rounded-md text-sm font-medium transition flex items-center"
+            title="พิมพ์ / บันทึกเป็น PDF"
+          >
+            <Printer class="w-4 h-4 mr-1" />
+            PDF
+          </button>
+          <button 
+            v-if="filteredAthletes.length > 0"
             @click="exportToExcel"
             class="px-3 py-1.5 bg-green-100 text-green-700 hover:bg-green-200 rounded-md text-sm font-medium transition flex items-center"
             title="ส่งออกใบเซ็นชื่อเป็น Excel"
           >
             <Download class="w-4 h-4 mr-1" />
-            ส่งออก Excel
+            Excel
           </button>
           <button 
             v-if="athletes.length > 0"

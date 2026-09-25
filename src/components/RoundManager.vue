@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { supabase } from '../lib/supabaseClient'
-import { Plus, Trash2, Edit2, Check, X, ChevronDown, ChevronUp, Users } from 'lucide-vue-next'
-
+import { Plus, Trash2, Edit2, Check, X, ChevronDown, ChevronUp, Users, Download, Printer } from 'lucide-vue-next'
+import * as XLSX from 'xlsx'
+import logoUrl from '../assets/project_logo.jpg'
 const events = ref<any[]>([])
 const selectedEventId = ref<number | string | null>(null)
 const rounds = ref<any[]>([])
@@ -50,8 +51,8 @@ const toggleParticipants = async (roundId: number) => {
   const { data, error } = await supabase.from('race_results')
     .select(`
       lane_number,
-      athletes ( full_name, faculties ( fac_name ) ),
-      relay_teams ( team_name, faculties ( fac_name ) )
+      athletes ( student_id, full_name, faculties ( fac_name ) ),
+      relay_teams ( team_name, faculties ( fac_name ), relay_members ( athletes ( full_name, faculties ( fac_name ) ) ) )
     `)
     .eq('round_id', roundId)
     .order('lane_number', { ascending: true })
@@ -183,6 +184,425 @@ const deleteRound = async (roundId: number, roundName: string) => {
   
   fetchRounds()
 }
+
+const exportRoundToExcel = async (round: any, eventName: string) => {
+  const roundId = round.round_id
+  let participants = roundParticipants.value[roundId]
+  
+  if (!participants) {
+    loadingParticipants.value[roundId] = true
+    const { data, error } = await supabase.from('race_results')
+      .select(`
+        lane_number,
+        athletes ( student_id, full_name, faculties ( fac_name ) ),
+        relay_teams ( team_name, faculties ( fac_name ), relay_members ( athletes ( full_name, faculties ( fac_name ) ) ) )
+      `)
+      .eq('round_id', roundId)
+      .order('lane_number', { ascending: true })
+    
+    if (error) {
+      alert('Failed to load participants: ' + error.message)
+      loadingParticipants.value[roundId] = false
+      return
+    }
+    participants = data || []
+    roundParticipants.value[roundId] = participants
+    loadingParticipants.value[roundId] = false
+  }
+
+  if (participants.length === 0) {
+    alert('ไม่มีนักกีฬาในรอบนี้')
+    return
+  }
+
+  let exportData: any[] = []
+  participants.forEach((p: any) => {
+    if (p.relay_teams && p.relay_teams.relay_members && p.relay_teams.relay_members.length > 0) {
+      p.relay_teams.relay_members.forEach((m: any, idx: number) => {
+        exportData.push({
+          'ลู่/ลำดับ': idx === 0 ? (p.lane_number || '-') : '',
+          'รหัสนิสิต / ชื่อทีม': idx === 0 ? p.relay_teams.team_name : '',
+          'ชื่อ-นามสกุล': m.athletes?.full_name || '-',
+          'สังกัด': m.athletes?.faculties?.fac_name || '',
+          'ลายมือชื่อ': '',
+          'หมายเหตุ': ''
+        })
+      })
+    } else {
+      exportData.push({
+        'ลู่/ลำดับ': p.lane_number || '-',
+        'รหัสนิสิต / ชื่อทีม': p.athletes?.student_id || p.relay_teams?.team_name || '-',
+        'ชื่อ-นามสกุล': p.athletes?.full_name || '-',
+        'สังกัด': p.athletes?.faculties?.fac_name || p.relay_teams?.faculties?.fac_name || '-',
+        'ลายมือชื่อ': '',
+        'หมายเหตุ': ''
+      })
+    }
+  })
+
+  const ws = XLSX.utils.json_to_sheet([])
+  XLSX.utils.sheet_add_json(ws, exportData, { origin: 'A5', skipHeader: false })
+  
+  XLSX.utils.sheet_add_aoa(ws, [
+    ['การแข่งขัน MSU TRACK RUNNING OPEN 2026'],
+    ['วันที่ 27 กันยายน 2569'],
+    [`รายการ: ${eventName} - ${round.round_name}`],
+    []
+  ], { origin: 'A1' })
+  
+  const wscols = [
+    { wch: 10 },
+    { wch: 15 },
+    { wch: 50 },
+    { wch: 25 },
+    { wch: 20 },
+    { wch: 15 },
+  ]
+  ws['!cols'] = wscols
+
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, 'Start List')
+  
+  const safeEventName = eventName.replace(/[\/\\?%*:|"<>]/g, '-')
+  const safeRoundName = round.round_name.replace(/[\/\\?%*:|"<>]/g, '-')
+  const fileName = `StartList_${safeEventName}_${safeRoundName}.xlsx`
+  XLSX.writeFile(wb, fileName)
+}
+
+const exportRoundToPDF = async (round: any, eventName: string) => {
+  const roundId = round.round_id
+  let participants = roundParticipants.value[roundId]
+  
+  if (!participants) {
+    loadingParticipants.value[roundId] = true
+    const { data, error } = await supabase.from('race_results')
+      .select(`
+        lane_number,
+        athletes ( student_id, full_name, faculties ( fac_name ) ),
+        relay_teams ( team_name, faculties ( fac_name ), relay_members ( athletes ( full_name, faculties ( fac_name ) ) ) )
+      `)
+      .eq('round_id', roundId)
+      .order('lane_number', { ascending: true })
+    
+    if (error) {
+      alert('Failed to load participants: ' + error.message)
+      loadingParticipants.value[roundId] = false
+      return
+    }
+    participants = data || []
+    roundParticipants.value[roundId] = participants
+    loadingParticipants.value[roundId] = false
+  }
+
+  if (participants.length === 0) {
+    alert('ไม่มีนักกีฬาในรอบนี้')
+    return
+  }
+
+  let tableRows = ''
+  participants.forEach((p: any) => {
+    if (p.relay_teams && p.relay_teams.relay_members && p.relay_teams.relay_members.length > 0) {
+      const members = p.relay_teams.relay_members
+      const rowSpan = members.length
+      
+      members.forEach((m: any, idx: number) => {
+        if (idx === 0) {
+          tableRows += `
+            <tr>
+              <td rowspan="${rowSpan}" style="border: 1px solid #333; padding: 10px 8px; text-align: center;">${p.lane_number || '-'}</td>
+              <td rowspan="${rowSpan}" style="border: 1px solid #333; padding: 10px 8px; text-align: center; font-weight: bold;">${p.relay_teams.team_name}</td>
+              <td style="border: 1px solid #333; padding: 10px 8px;">${m.athletes?.full_name || '-'}</td>
+              <td style="border: 1px solid #333; padding: 10px 8px;">${m.athletes?.faculties?.fac_name || ''}</td>
+              <td style="border: 1px solid #333; padding: 10px 8px;"></td>
+              <td rowspan="${rowSpan}" style="border: 1px solid #333; padding: 10px 8px;"></td>
+            </tr>
+          `
+        } else {
+          tableRows += `
+            <tr>
+              <td style="border: 1px solid #333; padding: 10px 8px;">${m.athletes?.full_name || '-'}</td>
+              <td style="border: 1px solid #333; padding: 10px 8px;">${m.athletes?.faculties?.fac_name || ''}</td>
+              <td style="border: 1px solid #333; padding: 10px 8px;"></td>
+            </tr>
+          `
+        }
+      })
+    } else {
+      tableRows += `
+        <tr>
+          <td style="border: 1px solid #333; padding: 10px 8px; text-align: center;">${p.lane_number || '-'}</td>
+          <td style="border: 1px solid #333; padding: 10px 8px; text-align: center;">${p.athletes?.student_id || p.relay_teams?.team_name || '-'}</td>
+          <td style="border: 1px solid #333; padding: 10px 8px;">${p.athletes?.full_name || '-'}</td>
+          <td style="border: 1px solid #333; padding: 10px 8px;">${p.athletes?.faculties?.fac_name || p.relay_teams?.faculties?.fac_name || '-'}</td>
+          <td style="border: 1px solid #333; padding: 10px 8px;"></td>
+          <td style="border: 1px solid #333; padding: 10px 8px;"></td>
+        </tr>
+      `
+    }
+  })
+
+  const printWindow = window.open('', '_blank')
+  if (!printWindow) {
+    alert('กรุณาอนุญาตให้ Pop-up ทำงานเพื่อพิมพ์เอกสาร')
+    return
+  }
+
+  printWindow.document.write(`
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <title>StartList_${eventName}_${round.round_name}</title>
+        <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;700&display=swap" rel="stylesheet">
+        <style>
+          body { font-family: 'Sarabun', Tahoma, sans-serif; padding: 20px; color: #000; }
+          .header-container { text-align: center; margin-bottom: 15px; }
+          .header-container img { height: 90px; margin-bottom: 10px; object-fit: contain; }
+          h2 { text-align: center; margin: 5px 0; font-size: 22px; }
+          h3 { text-align: center; margin: 5px 0; font-size: 18px; }
+          table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 15px; }
+          th { border: 1px solid #333; padding: 12px 8px; background-color: #f2f2f2; font-weight: bold; text-align: center; }
+          @media print {
+            @page { margin: 1cm; size: A4 portrait; }
+            body { padding: 0; }
+            th { background-color: #f2f2f2 !important; -webkit-print-color-adjust: exact; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="header-container">
+          <img src="${window.location.origin}${logoUrl}" alt="Logo" />
+          <h2>การแข่งขัน MSU TRACK RUNNING OPEN 2026</h2>
+          <h2>วันที่ 27 กันยายน 2569</h2>
+          <h3>รายการ: ${eventName} - ${round.round_name}</h3>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 8%;">ลู่/ลำดับ</th>
+              <th style="width: 15%;">รหัสนิสิต / ชื่อทีม</th>
+              <th style="width: 32%;">ชื่อ-นามสกุล</th>
+              <th style="width: 15%;">สังกัด</th>
+              <th style="width: 15%;">ลายมือชื่อ</th>
+              <th style="width: 15%;">หมายเหตุ</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${tableRows}
+          </tbody>
+        </table>
+        <script>
+          setTimeout(() => {
+            window.print();
+          }, 800);
+        <\/script>
+      </body>
+    </html>
+  `)
+  
+  printWindow.document.close()
+}
+
+const exportGroupToExcel = async (group: any) => {
+  let allParticipants: any[] = []
+  
+  for (const round of group.rounds) {
+    const { data } = await supabase.from('race_results')
+      .select(`
+        lane_number,
+        athletes ( student_id, full_name, faculties ( fac_name ) ),
+        relay_teams ( team_name, faculties ( fac_name ), relay_members ( athletes ( full_name, faculties ( fac_name ) ) ) )
+      `)
+      .eq('round_id', round.round_id)
+      .order('lane_number', { ascending: true })
+      
+    if (data) {
+      data.forEach((p: any) => {
+        if (p.relay_teams && p.relay_teams.relay_members && p.relay_teams.relay_members.length > 0) {
+          p.relay_teams.relay_members.forEach((m: any, idx: number) => {
+            allParticipants.push({
+              'รอบ (Heat)': idx === 0 ? round.round_name : '',
+              'ลู่/ลำดับ': idx === 0 ? (p.lane_number || '-') : '',
+              'รหัสนิสิต / ชื่อทีม': idx === 0 ? p.relay_teams.team_name : '',
+              'ชื่อ-นามสกุล': m.athletes?.full_name || '-',
+              'สังกัด': m.athletes?.faculties?.fac_name || '',
+              'ลายมือชื่อ': '',
+              'หมายเหตุ': ''
+            })
+          })
+        } else {
+          allParticipants.push({
+            'รอบ (Heat)': round.round_name,
+            'ลู่/ลำดับ': p.lane_number || '-',
+            'รหัสนิสิต / ชื่อทีม': p.athletes?.student_id || p.relay_teams?.team_name || '-',
+            'ชื่อ-นามสกุล': p.athletes?.full_name || '-',
+            'สังกัด': p.athletes?.faculties?.fac_name || p.relay_teams?.faculties?.fac_name || '-',
+            'ลายมือชื่อ': '',
+            'หมายเหตุ': ''
+          })
+        }
+      })
+    }
+  }
+
+  if (allParticipants.length === 0) {
+    alert('ไม่มีนักกีฬาในรายการนี้')
+    return
+  }
+
+  const ws = XLSX.utils.json_to_sheet([])
+  XLSX.utils.sheet_add_json(ws, allParticipants, { origin: 'A5', skipHeader: false })
+  
+  XLSX.utils.sheet_add_aoa(ws, [
+    ['การแข่งขัน MSU TRACK RUNNING OPEN 2026'],
+    ['วันที่ 27 กันยายน 2569'],
+    [`รายการ: ${group.eventName}`],
+    []
+  ], { origin: 'A1' })
+  
+  const wscols = [
+    { wch: 15 },
+    { wch: 10 },
+    { wch: 15 },
+    { wch: 50 },
+    { wch: 25 },
+    { wch: 20 },
+    { wch: 15 },
+  ]
+  ws['!cols'] = wscols
+
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, 'Start List')
+  
+  const safeEventName = group.eventName.replace(/[\/\\?%*:|"<>]/g, '-')
+  const fileName = `StartList_${safeEventName}_AllHeats.xlsx`
+  XLSX.writeFile(wb, fileName)
+}
+
+const exportGroupToPDF = async (group: any) => {
+  let tableRows = ''
+  
+  for (const round of group.rounds) {
+    const { data } = await supabase.from('race_results')
+      .select(`
+        lane_number,
+        athletes ( student_id, full_name, faculties ( fac_name ) ),
+        relay_teams ( team_name, faculties ( fac_name ), relay_members ( athletes ( full_name, faculties ( fac_name ) ) ) )
+      `)
+      .eq('round_id', round.round_id)
+      .order('lane_number', { ascending: true })
+      
+    if (data && data.length > 0) {
+      data.forEach((p: any) => {
+        if (p.relay_teams && p.relay_teams.relay_members && p.relay_teams.relay_members.length > 0) {
+          const members = p.relay_teams.relay_members
+          const rowSpan = members.length
+          
+          members.forEach((m: any, idx: number) => {
+            if (idx === 0) {
+              tableRows += `
+                <tr>
+                  <td rowspan="${rowSpan}" style="border: 1px solid #333; padding: 10px 8px; text-align: center; font-weight: bold;">${round.round_name}</td>
+                  <td rowspan="${rowSpan}" style="border: 1px solid #333; padding: 10px 8px; text-align: center;">${p.lane_number || '-'}</td>
+                  <td rowspan="${rowSpan}" style="border: 1px solid #333; padding: 10px 8px; text-align: center; font-weight: bold;">${p.relay_teams.team_name}</td>
+                  <td style="border: 1px solid #333; padding: 10px 8px;">${m.athletes?.full_name || '-'}</td>
+                  <td style="border: 1px solid #333; padding: 10px 8px;">${m.athletes?.faculties?.fac_name || ''}</td>
+                  <td style="border: 1px solid #333; padding: 10px 8px;"></td>
+                  <td rowspan="${rowSpan}" style="border: 1px solid #333; padding: 10px 8px;"></td>
+                </tr>
+              `
+            } else {
+              tableRows += `
+                <tr>
+                  <td style="border: 1px solid #333; padding: 10px 8px;">${m.athletes?.full_name || '-'}</td>
+                  <td style="border: 1px solid #333; padding: 10px 8px;">${m.athletes?.faculties?.fac_name || ''}</td>
+                  <td style="border: 1px solid #333; padding: 10px 8px;"></td>
+                </tr>
+              `
+            }
+          })
+        } else {
+          tableRows += `
+            <tr>
+              <td style="border: 1px solid #333; padding: 10px 8px; text-align: center; font-weight: bold;">${round.round_name}</td>
+              <td style="border: 1px solid #333; padding: 10px 8px; text-align: center;">${p.lane_number || '-'}</td>
+              <td style="border: 1px solid #333; padding: 10px 8px; text-align: center;">${p.athletes?.student_id || p.relay_teams?.team_name || '-'}</td>
+              <td style="border: 1px solid #333; padding: 10px 8px;">${p.athletes?.full_name || '-'}</td>
+              <td style="border: 1px solid #333; padding: 10px 8px;">${p.athletes?.faculties?.fac_name || p.relay_teams?.faculties?.fac_name || '-'}</td>
+              <td style="border: 1px solid #333; padding: 10px 8px;"></td>
+              <td style="border: 1px solid #333; padding: 10px 8px;"></td>
+            </tr>
+          `
+        }
+      })
+    }
+  }
+
+  if (!tableRows) {
+    alert('ไม่มีนักกีฬาในรายการนี้')
+    return
+  }
+
+  const printWindow = window.open('', '_blank')
+  if (!printWindow) {
+    alert('กรุณาอนุญาตให้ Pop-up ทำงานเพื่อพิมพ์เอกสาร')
+    return
+  }
+
+  printWindow.document.write(`
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <title>StartList_${group.eventName}_AllHeats</title>
+        <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;700&display=swap" rel="stylesheet">
+        <style>
+          body { font-family: 'Sarabun', Tahoma, sans-serif; padding: 20px; color: #000; }
+          .header-container { text-align: center; margin-bottom: 15px; }
+          .header-container img { height: 90px; margin-bottom: 10px; object-fit: contain; }
+          h2 { text-align: center; margin: 5px 0; font-size: 22px; }
+          h3 { text-align: center; margin: 5px 0; font-size: 18px; }
+          table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 15px; }
+          th { border: 1px solid #333; padding: 12px 8px; background-color: #f2f2f2; font-weight: bold; text-align: center; }
+          @media print {
+            @page { margin: 1cm; size: A4 portrait; }
+            body { padding: 0; }
+            th { background-color: #f2f2f2 !important; -webkit-print-color-adjust: exact; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="header-container">
+          <img src="${window.location.origin}${logoUrl}" alt="Logo" />
+          <h2>การแข่งขัน MSU TRACK RUNNING OPEN 2026</h2>
+          <h2>วันที่ 27 กันยายน 2569</h2>
+          <h3>รายการ: ${group.eventName}</h3>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 12%;">รอบ (Heat)</th>
+              <th style="width: 8%;">ลู่/ลำดับ</th>
+              <th style="width: 15%;">รหัสนิสิต / ชื่อทีม</th>
+              <th style="width: 25%;">ชื่อ-นามสกุล</th>
+              <th style="width: 14%;">สังกัด</th>
+              <th style="width: 13%;">ลายมือชื่อ</th>
+              <th style="width: 13%;">หมายเหตุ</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${tableRows}
+          </tbody>
+        </table>
+        <script>
+          setTimeout(() => {
+            window.print();
+          }, 800);
+        <\/script>
+      </body>
+    </html>
+  `)
+  
+  printWindow.document.close()
+}
 </script>
 
 <template>
@@ -253,11 +673,32 @@ const deleteRound = async (roundId: number, roundName: string) => {
         </div>
 
         <div class="divide-y divide-gray-200">
-          <div v-for="group in groupedRounds" :key="group.eventName">
+          <div v-for="group in groupedRounds" :key="group.eventName" class="mb-6 border border-indigo-100 rounded-lg overflow-hidden">
             
-            <div v-if="selectedEventId === 'ALL'" class="px-4 py-2 bg-indigo-50/50 border-b border-gray-100 text-sm font-bold text-indigo-900 flex items-center">
-              <div class="w-1.5 h-4 bg-indigo-500 rounded-full mr-2"></div>
-              {{ group.eventName }}
+            <div class="px-4 py-3 bg-indigo-50/70 border-b border-indigo-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+              <div class="text-sm font-bold text-indigo-900 flex items-center">
+                <div class="w-1.5 h-4 bg-indigo-500 rounded-full mr-2"></div>
+                {{ group.eventName }}
+              </div>
+              
+              <div class="flex items-center gap-2">
+                <button 
+                  @click="exportGroupToPDF(group)"
+                  class="px-2 py-1 bg-white text-indigo-600 hover:bg-indigo-100 border border-indigo-200 rounded-md transition flex items-center text-xs font-medium gap-1 shadow-sm"
+                  title="พิมพ์ใบเซ็นชื่อรวมทุกรอบเป็น PDF"
+                >
+                  <Printer class="w-3.5 h-3.5" />
+                  รวม PDF
+                </button>
+                <button 
+                  @click="exportGroupToExcel(group)"
+                  class="px-2 py-1 bg-white text-green-600 hover:bg-green-100 border border-green-200 rounded-md transition flex items-center text-xs font-medium gap-1 shadow-sm"
+                  title="ส่งออกใบเซ็นชื่อรวมทุกรอบเป็น Excel"
+                >
+                  <Download class="w-3.5 h-3.5" />
+                  รวม Excel
+                </button>
+              </div>
             </div>
 
             <ul class="divide-y divide-gray-100">
@@ -284,6 +725,21 @@ const deleteRound = async (roundId: number, roundName: string) => {
               </div>
 
               <div v-if="editingRoundId !== round.round_id" class="flex items-center gap-2">
+                <button 
+                  @click="exportRoundToPDF(round, group.eventName)"
+                  class="p-2 text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded-md transition"
+                  title="พิมพ์ / บันทึกเป็น PDF ใบเซ็นชื่อ (Start List)"
+                >
+                  <Printer class="w-4 h-4" />
+                </button>
+                <button 
+                  @click="exportRoundToExcel(round, group.eventName)"
+                  class="p-2 text-green-600 hover:text-green-800 hover:bg-green-50 rounded-md transition"
+                  title="ส่งออก Excel ใบเซ็นชื่อ (Start List)"
+                >
+                  <Download class="w-4 h-4" />
+                </button>
+                <div class="w-px h-4 bg-gray-300 mx-0.5"></div>
                 <button 
                   @click="startEdit(round)"
                   class="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-md transition"
